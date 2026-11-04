@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pollita Feliz</title>
+    <meta name="description" content="Un rollo de recuerdos para revelar entre todos.">
+    <meta name="theme-color" content="#121212">
+    <!-- Vista previa al compartir el link (WhatsApp, Telegram, Facebook...).
+         Cambia TU-REPO por el nombre de tu repositorio: la imagen necesita dirección COMPLETA. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Pollita Feliz">
+    <meta property="og:title" content="Pollita Feliz">
+    <meta property="og:description" content="Un rollo de recuerdos para revelar entre todos.">
+    <meta property="og:image" content="https://dey2109.github.io/pollita-feliz/img/preview.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="es_ES">
+    <meta name="twitter:card" content="summary_large_image">
+    <!-- Tipografías: Fraunces (títulos), Inter (texto), IBM Plex Mono (datos) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="img/logo.png">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+    <!-- PORTADA CENTRADA -->
+    <header>
+        <button class="btn-admin" id="btn-admin" title="Admin"><i class="fas fa-lock"></i></button>
+        <div class="masthead">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 40 40" width="38" height="38">
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="#FF5A1F" stroke-width="1.5"/>
+                    <circle cx="20" cy="20" r="9" fill="none" stroke="#FF5A1F" stroke-width="1.5"/>
+                    <path d="M20 4 L20 11 M36 20 L29 20 M20 36 L20 29 M4 20 L11 20" stroke="#FF5A1F" stroke-width="1.5"/>
+                </svg>
+            </span>
+            <p class="kicker">Rollo n.º 01 · 35 mm · ISO 400</p>
+            <h1>Pollita <em>Feliz</em></h1>
+            <p class="lema">Un rollo de recuerdos para revelar entre todos.</p>
+        </div>
+    </header>
+
+    <main id="contenido" tabindex="-1">
+        <div class="toolbar"><h2>Galería</h2></div>
+
+        <div class="controles">
+            <input type="search" id="buscador" class="buscador" placeholder="Busca un recuerdo por su título…" aria-label="Buscar por título">
+            <button class="btn-add" id="btn-abrir-modal"><i class="fas fa-plus"></i> Subir</button>
+        </div>
+
+        <div class="filtros">
+            <button class="filtro active" data-filtro="todo">Todo</button>
+            <button class="filtro" data-filtro="imagen">Imágenes</button>
+            <button class="filtro" data-filtro="video">Videos</button>
+            <button class="filtro" data-filtro="papelera" id="filtro-papelera" hidden><i class="fas fa-trash-can"></i> Papelera</button>
+        </div>
+
+        <div id="loading-skeleton" class="grid">
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+
+        <div id="galeria-grid" class="grid"></div>
+
+        <div id="paginacion" class="pagination" style="display:none;">
+            <button id="btn-anterior" aria-label="Página anterior"><i class="fas fa-chevron-left"></i></button>
+            <span id="pagina-info" aria-live="polite">1 / 1</span>
+            <button id="btn-siguiente" aria-label="Página siguiente"><i class="fas fa-chevron-right"></i></button>
+        </div>
+
+        <p id="empty-state" class="empty" style="display:none;">🐣 Aún no hay nada. Sé el primero.</p>
+    </main>
+
+    <!-- MODAL SUBIR -->
+    <div id="modal-subida" class="modal" role="dialog" aria-modal="true" aria-label="Subir al rollo">
+        <div class="modal-box">
+            <button class="modal-close" id="btn-cerrar-modal" aria-label="Cerrar">&times;</button>
+            <h3>Subir al rollo</h3>
+            <div class="tabs">
+                <button class="tab active" data-tipo="archivo"><i class="fas fa-upload"></i> Archivo</button>
+                <button class="tab" data-tipo="link"><i class="fas fa-link"></i> Link</button>
+            </div>
+            <form id="form-subida">
+                <div class="field">
+                    <label for="video-titulo">Título</label>
+                    <input type="text" id="video-titulo" placeholder="Ponle nombre a este recuerdo" maxlength="50" required>
+                </div>
+                <div id="seccion-archivo">
+                    <div class="field">
+                        <label>Archivos (máx 200MB c/u)</label>
+                        <div class="drop-zone" id="drop-zone">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Arrastra o haz clic · puedes elegir varios</p>
+                            <input type="file" id="video-archivo" multiple accept="video/mp4,video/webm,image/jpeg,image/png,image/gif,image/webp">
+                        </div>
+                        <small id="file-name"></small>
+                    </div>
+                </div>
+                <div id="seccion-link" style="display:none;">
+                    <div class="field">
+                        <label for="video-link">Link de cualquier web</label>
+                        <input type="url" id="video-link" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="progress-wrap" id="progress-container" style="display:none;">
+                    <div class="progress-bar" id="progress-bar"></div>
+                    <span id="progress-text">0%</span>
+                </div>
+                <button type="submit" class="btn-submit" id="btn-submit">Publicar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL CLAVE (admin) -->
+    <div id="pin-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
+        <div class="modal-box small">
+            <h3 id="pin-modal-title">Ingresa la clave</h3>
+            <input type="password" id="pin-modal-input" class="pin-input" placeholder="Clave">
+            <div class="modal-actions">
+                <button id="pin-modal-cancel" class="btn-cancel">Cancelar</button>
+                <button id="pin-modal-confirm" class="btn-ok">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CONFIRMAR -->
+    <div id="confirm-modal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
+        <div class="modal-box small">
+            <h3 id="confirm-modal-title">¿Seguro?</h3>
+            <p id="confirm-modal-message">Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+                <button id="confirm-modal-cancel" class="btn-cancel">Cancelar</button>
+                <button id="confirm-modal-ok" class="btn-danger">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIGHTBOX -->
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Vista ampliada">
+        <button class="lb-close" id="lightbox-close" aria-label="Cerrar">&times;</button>
+        <button class="lb-nav lb-prev" id="lightbox-prev" aria-label="Anterior"><i class="fas fa-chevron-left"></i></button>
+        <img class="lb-img" id="lightbox-img" src="" alt="">
+        <button class="lb-nav lb-next" id="lightbox-next" aria-label="Siguiente"><i class="fas fa-chevron-right"></i></button>
+        <div class="lb-info">
+            <div id="lightbox-titulo"></div>
+            <div id="lightbox-counter"></div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toasts" role="status" aria-live="polite"></div>
+
+    <footer>
+        <p>&copy; 2026 Pollita Feliz · revelado con cariño</p>
+    </footer>
+
+    <script type="module" src="js/script.js"></script>
+</body>
+</html>

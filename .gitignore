@@ -1,0 +1,8 @@
+# Nunca subas secretos: si un archivo los lleva, va aquí.
+.env
+.dev.vars
+.wrangler/
+node_modules/
+*.log
+.DS_Store
+config.js

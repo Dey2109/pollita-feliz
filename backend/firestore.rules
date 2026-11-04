@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admin = SOLO tu UID (el identificador único de tu usuario en Firebase Auth).
+    // Authentication -> Users -> columna "User UID". No depende de verificar el correo.
+    function esAdmin() {
+      return request.auth != null && request.auth.uid == 'n8Q5MBQkxdMbQx1FJUOLPTfUTsF2';
+    }
+
+    // Ruta al documento "limites/<uid>": guarda cuándo subió algo esa persona por última vez.
+    function limite() {
+      return /databases/$(database)/documents/limites/$(request.auth.uid);
+    }
+
+    match /galeria/{id} {
+      allow read: if true;
+
+      function esDueno() { return request.auth != null && resource.data.uid == request.auth.uid; }
+      // ¿Los únicos campos que cambian en esta escritura son estos?
+      function cambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+
+      // CREAR: sesión válida + datos con forma exacta + 3 segundos entre publicaciones.
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['titulo', 'url', 'tipo', 'uid', 'fecha', 'likedBy', 'thumb'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.titulo is string
+        && request.resource.data.titulo.size() > 0
+        && request.resource.data.titulo.size() <= 60
+        && request.resource.data.url is string
+        && request.resource.data.url.matches('https://.*')
+        && request.resource.data.url.size() < 500
+        // La miniatura es opcional; si viene, debe ser un https corto.
+        && (!('thumb' in request.resource.data)
+            || (request.resource.data.thumb is string
+                && request.resource.data.thumb.matches('https://.*')
+                && request.resource.data.thumb.size() < 500))
+        && request.resource.data.tipo in ['imagen', 'video', 'enlace']
+        && request.resource.data.fecha == request.time            // la fecha la pone el servidor, no el cliente
+        && request.resource.data.likedBy.size() == 0              // nadie nace con likes inflados
+        // Anti-spam: la marca "última subida" se actualiza en la MISMA operación (writeBatch)...
+        && getAfter(limite()).data.ultima == request.time
+        // ...y la anterior debe tener más de 3 segundos (o no existir si es la primera vez).
+        && (!exists(limite()) || request.time > get(limite()).data.ultima + duration.value(3, 's'));
+
+      // ACTUALIZAR: cuatro casos, y en cada uno solo se puede tocar UN campo.
+      allow update: if request.auth != null && (
+        // 1) Like: solo "likedBy", y solo agregar o quitar TU propio uid.
+        //    .get('likedBy', []) tolera publicaciones viejas que no tienen ese campo.
+        (cambia(['likedBy']) && (
+             request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().union([request.auth.uid].toSet())
+          || request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().difference([request.auth.uid].toSet())))
+        // 2) Editar título: dueño o admin.
+        || ((esDueno() || esAdmin()) && cambia(['titulo'])
+            && request.resource.data.titulo is string
+            && request.resource.data.titulo.size() > 0
+            && request.resource.data.titulo.size() <= 60)
+        // 3) Mandar a la papelera: dueño o admin.
+        || ((esDueno() || esAdmin()) && cambia(['borrado']) && request.resource.data.borrado == true)
+        // 4) Restaurar de la papelera: solo admin.
+        || (esAdmin() && cambia(['borrado']) && request.resource.data.borrado == false)
+      );
+
+      // BORRADO REAL: solo el admin (el resto "borra" mandando a la papelera).
+      allow delete: if esAdmin();
+    }
+
+    // Marca de última subida por usuario: cada quien escribe solo la suya, con hora del servidor.
+    match /limites/{uid} {
+      allow read: if false;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['ultima'])
+        && request.resource.data.ultima == request.time;
+    }
+  }
+}
