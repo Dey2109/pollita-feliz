@@ -10,7 +10,11 @@ import { collection, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp
 import { signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+// Quitamos cualquier "/" sobrante al final: con "…workers.dev/" + "/upload" salía "//upload" y daba 404.
+const WORKER_BASE = WORKER_URL.replace(/\/+$/, '');
 const $ = (id) => document.getElementById(id);
+// Código del error de Firebase (ej. permission-denied) para ver la causa real en vez de un aviso genérico.
+const cod = (e) => (e?.code ? ` (${e.code})` : '');
 const ITEMS_POR_PAGINA = 15;
 
 // Un solo objeto de estado: así es fácil saber qué datos mueven la pantalla.
@@ -46,7 +50,7 @@ function urlSegura(u) {
 // Para MOSTRAR un archivo la página NO habla con Telegram: usa el Worker, que es quien tiene el token
 // y siempre pide una ruta fresca (las rutas de Telegram caducan).
 const FID_BASE = 'https://api.telegram.org/fid/';
-const urlTelegram = (fileId) => Promise.resolve(`${WORKER_URL}/file/${encodeURIComponent(fileId)}`);
+const urlTelegram = (fileId) => Promise.resolve(`${WORKER_BASE}/file/${encodeURIComponent(fileId)}`);
 const urlMedia = (u) => urlSegura(u || '');
 // Para file_id de Telegram arma la dirección del Worker; para otros links (Catbox, etc.) los deja como están.
 const resolverMedia = (u) => (u || '').startsWith(FID_BASE) ? urlTelegram(u.slice(FID_BASE.length)) : Promise.resolve(urlMedia(u));
@@ -102,6 +106,8 @@ function confirmar(titulo, mensaje, textoOk = 'Eliminar') {
 onAuthStateChanged(auth, (user) => {
     if (!user) { signInAnonymously(auth).catch((err) => { console.error(err); mostrarToast('No se pudo iniciar sesión: ' + err.code, 'error', 6000); }); return; }
     estado.user = user;
+    // Para comparar con el UID de las reglas: si eres admin, este UID debe ser EXACTAMENTE el que pusiste en firestore.rules.
+    console.info('Sesión:', user.uid, user.isAnonymous ? '(anónima)' : '(con correo)');
     actualizarUIAdmin();
     mostrarPagina(); // re-dibuja para mostrar/ocultar botones de borrar
 });
@@ -277,7 +283,7 @@ async function alternarLike(item, yaLeGusta) {
     if (!estado.user) return;
     try {
         await updateDoc(doc(db, 'galeria', item.id), { likedBy: yaLeGusta ? arrayRemove(estado.user.uid) : arrayUnion(estado.user.uid) });
-    } catch { mostrarToast('No se pudo registrar el me gusta', 'error'); }
+    } catch (e) { console.error(e); mostrarToast('No se pudo registrar el me gusta' + cod(e), 'error'); }
 }
 
 // Botón de acción de tarjeta: "title" para el mouse y "aria-label" para lectores de pantalla.
@@ -336,7 +342,7 @@ async function editarTitulo(item) {
     if (nuevo === null || nuevo === '' || nuevo === item.titulo) return;
     if (nuevo.length > 50) return mostrarToast('El título puede tener hasta 50 caracteres', 'warning');
     try { await updateDoc(doc(db, 'galeria', item.id), { titulo: nuevo }); mostrarToast('Título actualizado', 'success'); }
-    catch { mostrarToast('No tienes permiso para editar esto', 'error'); }
+    catch (e) { console.error(e); mostrarToast('No tienes permiso para editar esto' + cod(e), 'error'); }
 }
 
 // Papelera: "borrar" solo marca borrado:true (se puede deshacer). El borrado real es solo del admin y desde la papelera.
@@ -344,16 +350,16 @@ async function enviarAPapelera(item) {
     const msg = esAdmin() ? 'Irá a la papelera y podrás restaurarla.' : 'Se quitará de la galería.';
     if (!(await confirmar('Mover a la papelera', msg, 'Mover'))) return;
     try { await updateDoc(doc(db, 'galeria', item.id), { borrado: true }); mostrarToast('Movida a la papelera', 'success'); }
-    catch { mostrarToast('No tienes permiso para hacer esto', 'error'); }
+    catch (e) { console.error(e); mostrarToast('No tienes permiso para hacer esto' + cod(e), 'error'); }
 }
 async function restaurar(item) {
     try { await updateDoc(doc(db, 'galeria', item.id), { borrado: false }); mostrarToast('Publicación restaurada', 'success'); }
-    catch { mostrarToast('Solo el admin puede restaurar', 'error'); }
+    catch (e) { console.error(e); mostrarToast('Solo el admin puede restaurar' + cod(e), 'error'); }
 }
 async function eliminarDefinitivo(item) {
     if (!(await confirmar('Eliminar para siempre', 'Esta acción no se puede deshacer.'))) return;
     try { await deleteDoc(doc(db, 'galeria', item.id)); mostrarToast('Eliminada para siempre', 'success'); }
-    catch { mostrarToast('Solo el admin puede eliminar para siempre', 'error'); }
+    catch (e) { console.error(e); mostrarToast('Solo el admin puede eliminar para siempre' + cod(e), 'error'); }
 }
 
 // Enlace directo: https://tu-sitio/#p/<id>. El "#" no recarga la página ni viaja al servidor, solo lo lee este script.
@@ -491,7 +497,7 @@ async function subirATelegram(file, onProgress) {
     const fd = new FormData();
     fd.append('file', file);
     let data;
-    try { data = JSON.parse(await enviarConProgreso(`${WORKER_URL}/upload`, fd, onProgress, { Authorization: `Bearer ${idToken}` })); }
+    try { data = JSON.parse(await enviarConProgreso(`${WORKER_BASE}/upload`, fd, onProgress, { Authorization: `Bearer ${idToken}` })); }
     catch { throw new Error('Respuesta inválida del servidor de subida'); }
     if (!data.fileId) throw new Error(data.error || 'No se obtuvo el file_id');
     return { url: FID_BASE + data.fileId, tipo: file.type.startsWith('image/') ? 'imagen' : 'video' };
