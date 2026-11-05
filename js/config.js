@@ -27,7 +27,7 @@ const app = initializeApp(firebaseConfig);
 
 // 2) App Check (Fraud Defense). Pega el ID de tu clave (Google Cloud -> Fraud Defense -> Claves).
 // Es público: solo funciona en los dominios que registraste en la clave.
-const APPCHECK_SITE_KEY = "6LeLeQouAAAAALzNwJmg3KT4s1X-ybIaIqAgkxsF";
+const APPCHECK_SITE_KEY = "6LewUwouAAAAAICzI6EyqCHS0Ny1tpvYsfix834t";
 // Dominios donde reCAPTCHA SÍ funciona (los que registraste en la clave). En cualquier otro sitio
 // (tu computadora, por ejemplo) se usa el token de depuración que imprime la consola.
 const SITIOS_REGISTRADOS = ["dey2109.github.io"];
