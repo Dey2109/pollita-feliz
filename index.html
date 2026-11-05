@@ -6,8 +6,7 @@
     <title>Pollita Feliz</title>
     <meta name="description" content="Un rollo de recuerdos para revelar entre todos.">
     <meta name="theme-color" content="#121212">
-    <!-- Vista previa al compartir el link (WhatsApp, Telegram, Facebook...).
-         Cambia TU-REPO por el nombre de tu repositorio: la imagen necesita dirección COMPLETA. -->
+    <!-- Vista previa al compartir el link (WhatsApp, Telegram, Facebook...). La imagen necesita dirección COMPLETA. -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Pollita Feliz">
     <meta property="og:title" content="Pollita Feliz">
@@ -21,7 +20,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="icon" href="img/logo.png">
+    <!-- Íconos de la pestaña y del celular, y datos para "instalar" el sitio como app -->
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="img/favicon.ico" sizes="48x48">
+    <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <!-- Tema guardado: se aplica ANTES de pintar para que no haya un destello del tema equivocado -->
+    <script>try { document.documentElement.dataset.tema = localStorage.getItem('pf_tema') || 'oscuro'; } catch (e) { document.documentElement.dataset.tema = 'oscuro'; }</script>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -29,6 +34,7 @@
 
     <!-- PORTADA CENTRADA -->
     <header>
+        <button class="btn-tema" id="btn-tema" title="Cambiar tema" aria-label="Cambiar tema"><i class="fas fa-circle-half-stroke"></i></button>
         <button class="btn-admin" id="btn-admin" title="Admin"><i class="fas fa-lock"></i></button>
         <div class="masthead">
             <span class="brand-mark" aria-hidden="true">
@@ -139,6 +145,38 @@
         </div>
     </div>
 
+    <!-- TUTORIAL (primera visita) -->
+    <div id="tutorial-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-titulo">
+        <div class="modal-box">
+            <h3 id="tutorial-titulo">Bienvenido al rollo</h3>
+            <ol class="pasos">
+                <li><i class="fas fa-plus"></i><div><strong>Sube</strong> fotos, videos o links con el botón <em>Subir</em>. También puedes arrastrar archivos a la página o pegarlos con <kbd>Ctrl</kbd>+<kbd>V</kbd>.</div></li>
+                <li><i class="fas fa-magnifying-glass"></i><div><strong>Explora</strong> con el buscador y los filtros. Toca una foto para verla en grande.</div></li>
+                <li><i class="fas fa-heart"></i><div><strong>Dale me gusta</strong> a lo que más te guste. Lo nuevo desde tu última visita lleva una etiqueta <em>Nuevo</em>.</div></li>
+                <li><i class="fas fa-share-nodes"></i><div><strong>Comparte</strong> el enlace de cualquier publicación: quien lo abra irá directo a ella.</div></li>
+            </ol>
+            <div class="modal-actions"><button id="tutorial-ok" class="btn-ok">¡Entendido!</button></div>
+        </div>
+    </div>
+
+    <!-- ATAJOS DE TECLADO -->
+    <div id="atajos-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="atajos-titulo">
+        <div class="modal-box small">
+            <h3 id="atajos-titulo">Atajos de teclado</h3>
+            <dl class="atajos">
+                <dt><kbd>/</kbd></dt><dd>Ir al buscador</dd>
+                <dt><kbd>?</kbd></dt><dd>Mostrar esta ayuda</dd>
+                <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Foto anterior o siguiente</dd>
+                <dt><kbd>F</kbd></dt><dd>Me gusta (foto abierta)</dd>
+                <dt><kbd>C</kbd></dt><dd>Compartir o copiar el enlace</dd>
+                <dt><kbd>D</kbd></dt><dd>Descargar la foto</dd>
+                <dt><kbd>Esc</kbd></dt><dd>Cerrar lo que esté abierto</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>V</kbd></dt><dd>Pegar una imagen para subirla</dd>
+            </dl>
+            <div class="modal-actions"><button id="atajos-ok" class="btn-ok">Cerrar</button></div>
+        </div>
+    </div>
+
     <!-- LIGHTBOX -->
     <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Vista ampliada">
         <button class="lb-close" id="lightbox-close" aria-label="Cerrar">&times;</button>
@@ -155,6 +193,7 @@
 
     <footer>
         <p>&copy; 2026 Pollita Feliz · revelado con cariño</p>
+        <p class="pie-links"><button id="btn-tutorial">¿Cómo funciona?</button><button id="btn-atajos">Atajos de teclado</button></p>
     </footer>
 
     <script type="module" src="js/script.js"></script>

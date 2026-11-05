@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fotograma perdido · Pollita Feliz</title>
+    <meta name="theme-color" content="#121212">
+    <link rel="icon" href="https://dey2109.github.io/pollita-feliz/img/favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+    <!-- Todo el CSS va aquí adentro a propósito: esta página se muestra en CUALQUIER dirección inexistente
+         (por ejemplo /pollita-feliz/a/b/c) y ahí las rutas relativas como "css/style.css" apuntarían a otro lado. -->
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{min-height:100vh;display:flex;flex-direction:column;background:#121212;color:#F4F1E8;font-family:system-ui,sans-serif}
+        .tira{height:16px;border-bottom:1px solid rgba(244,241,232,.12);background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='16'%3E%3Crect x='7' y='4' width='10' height='8' rx='2' fill='%23121212'/%3E%3C/svg%3E") 0 0/24px 16px repeat-x,#1d1b17;animation:avance 2s linear infinite}
+        @keyframes avance{to{background-position-x:-24px}}
+        main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:40px 24px;text-align:center}
+        .kicker{font:500 .7rem 'IBM Plex Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#8C877A}
+        h1{font:600 clamp(4rem,16vw,9rem)/1 'Fraunces',Georgia,serif;letter-spacing:-.04em}
+        h1 em{font-style:italic;font-weight:500;color:#FF5A1F}
+        .marco{width:84px;height:63px;border:1.5px dashed rgba(244,241,232,.3);border-radius:4px}
+        p.lema{max-width:420px;font:italic 500 1.15rem/1.5 'Fraunces',Georgia,serif;color:#B9B4A6}
+        a{display:inline-block;margin-top:8px;padding:11px 26px;border-radius:999px;background:#FF5A1F;color:#121212;font:600 .9rem system-ui,sans-serif;text-decoration:none}
+        a:hover{filter:brightness(1.12)}
+        a:focus-visible{outline:2px solid #F4F1E8;outline-offset:3px}
+        @media (prefers-reduced-motion:reduce){.tira{animation:none}}
+    </style>
+</head>
+<body>
+    <div class="tira" aria-hidden="true"></div>
+    <main>
+        <p class="kicker">Fotograma no encontrado</p>
+        <h1>4<em>0</em>4</h1>
+        <div class="marco" aria-hidden="true"></div>
+        <p class="lema">Este fotograma no se reveló: la página que buscas no existe o se movió de lugar.</p>
+        <a href="https://dey2109.github.io/pollita-feliz/">Volver a la galería</a>
+    </main>
+    <div class="tira" aria-hidden="true"></div>
+</body>
+</html>

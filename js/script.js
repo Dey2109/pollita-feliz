@@ -15,6 +15,15 @@ const WORKER_BASE = WORKER_URL.replace(/\/+$/, '');
 const $ = (id) => document.getElementById(id);
 // Código del error de Firebase (ej. permission-denied) para ver la causa real en vez de un aviso genérico.
 const cod = (e) => (e?.code ? ` (${e.code})` : '');
+// localStorage puede lanzar error (modo privado, almacenamiento lleno): este envoltorio evita que eso rompa la página.
+const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento: seguimos */ } } };
+// "Nuevo": lo que otras personas publicaron desde tu última visita. La fecha se guarda en ESTE navegador.
+// 0 = primera visita: no se marca nada como nuevo (si no, absolutamente todo lo sería).
+const VISITA_PREVIA = Number(ls.get('pf_ultima_visita')) || 0;
+const guardarVisita = () => ls.set('pf_ultima_visita', String(Date.now()));
+addEventListener('pagehide', guardarVisita);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarVisita(); }); // en celular "pagehide" no siempre se dispara
+const esNuevo = (i) => VISITA_PREVIA > 0 && i.uid !== estado.user?.uid && (i.fecha?.toMillis?.() || 0) > VISITA_PREVIA;
 const ITEMS_POR_PAGINA = 15;
 
 // Un solo objeto de estado: así es fácil saber qué datos mueven la pantalla.
@@ -296,6 +305,7 @@ function crearTarjeta(item) {
     const puedeGestionar = esAdmin() || item.uid === estado.user?.uid; // la UI solo muestra; las reglas son las que mandan
     const media = el('div', { class: 'card-media' },
         el('div', { class: 'card-badges' },
+            esNuevo(item) ? el('span', { class: 'card-badge nuevo', text: 'Nuevo' }) : null, // el() ignora los null
             el('span', { class: 'card-badge', text: tipo === 'imagen' ? 'Imagen' : 'Video' })),
         crearMedia(item, tipo));
     if (tipo === 'imagen') {
@@ -315,7 +325,7 @@ function crearTarjeta(item) {
     } else {
         acciones.append(
             btnAccion('download', 'Descargar', 'fas fa-download', (e) => descargar(e, item, tipo)),
-            btnAccion('share', 'Copiar enlace a esta publicación', 'fas fa-link', () => compartir(item)));
+            btnAccion('share', 'Compartir', 'fas fa-share-nodes', () => compartir(item)));
         // Para videos de otras webs: abrir el original (por si esa web bloquea el reproductor incrustado).
         if (!['imagen', 'video'].includes(tipo)) {
             acciones.append(el('a', { class: 'card-btn', title: 'Abrir original', 'aria-label': 'Abrir original', href: urlMedia(item.url), target: '_blank', rel: 'noopener noreferrer' }, icono('fas fa-external-link-alt')));
@@ -365,6 +375,12 @@ async function eliminarDefinitivo(item) {
 // Enlace directo: https://tu-sitio/#p/<id>. El "#" no recarga la página ni viaja al servidor, solo lo lee este script.
 async function compartir(item) {
     const link = `${location.origin}${location.pathname}#p/${item.id}`;
+    // En celular (y en algunos navegadores) abre el menú nativo: WhatsApp, Telegram, correo...
+    // Si no existe, o fallara, se copia el enlace como antes.
+    if (navigator.share) {
+        try { await navigator.share({ title: item.titulo, text: `«${item.titulo}» en Pollita Feliz`, url: link }); return; }
+        catch (e) { if (e.name === 'AbortError') return; } // cerró el menú a propósito: no insistimos
+    }
     try { await navigator.clipboard.writeText(link); mostrarToast('Enlace copiado', 'success'); }
     catch { window.prompt('Copia este enlace:', link); } // si el navegador no deja usar el portapapeles
 }
@@ -400,17 +416,38 @@ async function descargar(e, item, tipo) {
 }
 
 // ---------- Lightbox ----------
+// Transición "la foto vuela": la miniatura de la tarjeta se agranda hasta el lightbox (y al revés al cerrar).
+// Usa la View Transitions API: el navegador toma una "foto" del antes y del después y anima entre ambas.
+// Si el navegador no la tiene, o la persona pidió menos movimiento, simplemente se abre sin animación.
+const imgDeTarjeta = (id) => id ? document.querySelector(`[data-id="${CSS.escape(id)}"] .card-media img`) : null;
+function conTransicion(origen, cambio, origenDespues = false) {
+    if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return cambio();
+    const html = document.documentElement;
+    html.classList.add('vt'); // apaga el fundido normal del lightbox mientras dura la transición
+    // Dos elementos no pueden tener el mismo view-transition-name a la vez: por eso el nombre se pone y se quita en el momento justo.
+    if (origen && !origenDespues) origen.style.viewTransitionName = 'foto';
+    const t = document.startViewTransition(() => {
+        if (origen) origen.style.viewTransitionName = origenDespues ? 'foto' : '';
+        cambio();
+    });
+    t.finished.finally(() => { html.classList.remove('vt'); if (origen) origen.style.viewTransitionName = ''; });
+}
 function abrirLightbox(i) {
     if (i < 0) return;
     estado.lbIdx = i; estado.foco = document.activeElement; // recordamos dónde estaba el foco para devolverlo al cerrar
-    pintarLightbox();
-    $('lightbox').classList.add('active'); document.body.style.overflow = 'hidden';
-    $('lightbox-close').focus();
+    conTransicion(imgDeTarjeta(estado.imagenes[i].id), () => {
+        pintarLightbox();
+        $('lightbox').classList.add('active'); document.body.style.overflow = 'hidden';
+        $('lightbox-close').focus();
+    });
 }
 function cerrarLightbox() {
-    $('lightbox').classList.remove('active'); document.body.style.overflow = '';
-    history.replaceState(null, '', location.pathname + location.search); // quita el #p/... de la dirección
-    estado.foco?.focus?.();
+    // Si navegaste a una foto de otra página, su tarjeta no existe y se cierra sin animar.
+    conTransicion(imgDeTarjeta(estado.imagenes[estado.lbIdx]?.id), () => {
+        $('lightbox').classList.remove('active'); document.body.style.overflow = '';
+        history.replaceState(null, '', location.pathname + location.search); // quita el #p/... de la dirección
+        estado.foco?.focus?.();
+    }, true);
 }
 function pintarLightbox() {
     const img = estado.imagenes[estado.lbIdx]; if (!img) return;
@@ -446,16 +483,30 @@ $('lightbox').addEventListener('touchend', (e) => {
 // UN solo listener de teclado: más fácil de razonar.
 document.addEventListener('keydown', (e) => {
     const lbAbierto = $('lightbox').classList.contains('active');
+    const ayudaAbierta = $('atajos-modal').classList.contains('active');
+    const escribiendo = /^(input|textarea|select)$/i.test(e.target.tagName);
     if (e.key === 'Escape') { // cierra lo que esté más "arriba"
         if ($('pin-modal').classList.contains('active')) $('pin-modal-cancel').click();
         else if ($('confirm-modal').classList.contains('active')) $('confirm-modal-cancel').click();
+        else if (ayudaAbierta) $('atajos-modal').classList.remove('active');
+        else if ($('tutorial-modal').classList.contains('active')) cerrarTutorial();
         else if (lbAbierto) cerrarLightbox();
         else $('modal-subida').classList.remove('active');
     }
     if (lbAbierto && e.key === 'ArrowRight') moverLB(1);
     if (lbAbierto && e.key === 'ArrowLeft') moverLB(-1);
+    // Atajos de una sola tecla. Solo si NO estás escribiendo en un campo y sin Ctrl/Alt/Cmd,
+    // para no pisar los atajos del navegador (Ctrl+C copia texto, no el enlace).
+    if (!escribiendo && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const img = lbAbierto ? estado.imagenes[estado.lbIdx] : null;
+        if (e.key === '?') $('atajos-modal').classList.toggle('active');
+        else if (e.key === '/') { e.preventDefault(); $('buscador').focus(); }
+        else if (img && e.key.toLowerCase() === 'f') alternarLike(img, (img.likedBy || []).includes(estado.user?.uid));
+        else if (img && e.key.toLowerCase() === 'c') compartir(img);
+        else if (img && e.key.toLowerCase() === 'd') descargar({ stopPropagation() {} }, img, 'imagen'); // descargar() espera un evento: le pasamos uno de mentira
+    }
     // Trampa de foco: con Tab el foco da vueltas entre los 3 botones y no se escapa a la página de atrás.
-    if (lbAbierto && e.key === 'Tab') {
+    if (lbAbierto && !ayudaAbierta && e.key === 'Tab') {
         const f = ['lightbox-close', 'lightbox-prev', 'lightbox-next'].map($);
         const i = f.indexOf(document.activeElement);
         e.preventDefault();
@@ -660,5 +711,55 @@ $('buscador').addEventListener('input', (e) => { // debounce: espera a que dejes
     temporizador = setTimeout(() => { estado.busqueda = e.target.value.trim(); estado.pagina = 1; mostrarPagina(); }, 200);
 });
 
-console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px; font-weight:bold;');
-console.log("%cFUNCIONA ESTA MIERDA, VAMOOOOOS!!!", 'color:#4caf50; font-weight:bold;');
+// ---------- Pegar (Ctrl+V) o arrastrar archivos a CUALQUIER parte de la página ----------
+// Abre el modal de subida con los archivos ya puestos; solo falta escribir el título.
+function recibirArchivos(lista) {
+    const files = [...lista].filter((f) => /^(image|video)\//.test(f.type));
+    if (!files.length) return false;
+    cambiarTab('archivo');
+    const dt = new DataTransfer(); // un <input type="file"> solo acepta archivos a través de un DataTransfer
+    files.forEach((f) => dt.items.add(f));
+    $('video-archivo').files = dt.files;
+    $('video-archivo').dispatchEvent(new Event('change')); // para que se actualice el texto "N archivos"
+    $('modal-subida').classList.add('active');
+    $('video-titulo').focus();
+    return true;
+}
+document.addEventListener('paste', (e) => {
+    if (/^(input|textarea)$/i.test(e.target.tagName)) return; // pegando texto en un campo: no interferir
+    if (recibirArchivos(e.clipboardData?.files || [])) e.preventDefault();
+});
+const traeArchivos = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+let arrastres = 0; // dragenter/dragleave se disparan por cada elemento hijo: contamos entradas y salidas
+window.addEventListener('dragenter', (e) => { if (traeArchivos(e)) { arrastres++; document.body.classList.add('arrastrando'); } });
+window.addEventListener('dragleave', (e) => { if (traeArchivos(e) && --arrastres <= 0) { arrastres = 0; document.body.classList.remove('arrastrando'); } });
+window.addEventListener('dragover', (e) => { if (traeArchivos(e)) e.preventDefault(); }); // sin esto el navegador no permite soltar
+window.addEventListener('drop', (e) => {
+    arrastres = 0; document.body.classList.remove('arrastrando');
+    if (traeArchivos(e)) { e.preventDefault(); recibirArchivos(e.dataTransfer.files); }
+});
+
+// ---------- Tema claro / oscuro ----------
+// El tema inicial lo pone un mini script en el <head> (antes de pintar) para que no haya un destello del otro tema.
+function aplicarTema(tema, guardar = true) {
+    document.documentElement.dataset.tema = tema;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tema === 'claro' ? '#F4F1E8' : '#121212'); // color de la barra del celular
+    if (guardar) ls.set('pf_tema', tema);
+    const b = $('btn-tema');
+    if (b) { b.title = tema === 'claro' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'; b.setAttribute('aria-label', b.title); }
+}
+$('btn-tema').addEventListener('click', () => aplicarTema(document.documentElement.dataset.tema === 'claro' ? 'oscuro' : 'claro'));
+aplicarTema(document.documentElement.dataset.tema || 'oscuro', false);
+
+// ---------- Mini tutorial (solo la primera visita) y ayuda de atajos ----------
+const abrirTutorial = () => { $('tutorial-modal').classList.add('active'); $('tutorial-ok').focus(); };
+function cerrarTutorial() { $('tutorial-modal').classList.remove('active'); ls.set('pf_tutorial', '1'); } // "visto": no vuelve a salir solo
+$('tutorial-ok').addEventListener('click', cerrarTutorial);
+$('btn-tutorial').addEventListener('click', abrirTutorial);
+$('btn-atajos').addEventListener('click', () => $('atajos-modal').classList.add('active'));
+$('atajos-ok').addEventListener('click', () => $('atajos-modal').classList.remove('active'));
+$('tutorial-modal').addEventListener('click', (e) => { if (e.target === $('tutorial-modal')) cerrarTutorial(); });
+$('atajos-modal').addEventListener('click', (e) => { if (e.target === $('atajos-modal')) $('atajos-modal').classList.remove('active'); });
+if (!ls.get('pf_tutorial')) setTimeout(abrirTutorial, 700); // un respiro para que cargue la galería antes
+
+console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px;font-weight:bold;');

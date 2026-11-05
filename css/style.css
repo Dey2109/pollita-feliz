@@ -260,3 +260,73 @@ footer { margin-top: auto; padding-bottom: 28px; text-align: center; font: .68re
 .skip-link:focus { top: 12px; }
 main:focus { outline: none; }
 @media (max-width: 768px) { .card-btn { width: 30px; height: 30px; } .card-actions { gap: 4px; } }
+
+/* =====================================================================
+   TANDA 4: tema claro, pegar/arrastrar, "Nuevo", transición de la foto,
+   tutorial, atajos y botón de tema
+   ===================================================================== */
+
+/* ---------- Botón de tema (arriba a la izquierda, simétrico al del admin) ---------- */
+.btn-tema { position: absolute; top: 34px; left: 24px; z-index: 2; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--film); font-size: .85rem; transition: all .2s var(--ease); }
+.btn-tema:hover { border-color: var(--safelight); color: var(--safelight); transform: rotate(25deg); }
+
+/* ---------- Etiqueta "Nuevo" ---------- */
+.card-badge.nuevo { background: var(--safelight); color: #121212; }
+
+/* ---------- Pegar o arrastrar: aviso a pantalla completa mientras arrastras un archivo ---------- */
+body.arrastrando::before { content: "Suelta aquí para subir"; position: fixed; inset: 14px; z-index: 4000; display: flex; align-items: center; justify-content: center; pointer-events: none;
+    background: rgba(18, 18, 18, .88); border: 2px dashed var(--safelight); border-radius: 14px; color: var(--paper);
+    font: italic 500 1.8rem var(--serif); }
+
+/* ---------- Transición "la foto vuela" (View Transitions) ---------- */
+.lightbox.active .lb-img { view-transition-name: foto; }
+::view-transition-group(foto) { animation-duration: .4s; animation-timing-function: var(--ease); }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }   /* solo se anima la foto, no toda la página */
+html.vt .lightbox { transition: none; }   /* durante la transición el lightbox no hace su fundido: la foto ya "vuela" */
+
+/* ---------- Tutorial y atajos ---------- */
+.pasos { list-style: none; display: grid; gap: 14px; margin-bottom: 24px; text-align: left; }
+.pasos li { display: flex; gap: 14px; align-items: flex-start; font-size: .92rem; line-height: 1.5; color: var(--paper-dim); }
+.pasos li i { flex-shrink: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--safelight); font-size: .85rem; }
+.pasos strong { color: var(--paper); }
+kbd { display: inline-block; min-width: 24px; padding: 1px 7px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--panel); color: var(--paper); font: 500 .74rem var(--mono); text-align: center; }
+.atajos { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; margin-bottom: 22px; text-align: left; align-items: center; }
+.atajos dt { white-space: nowrap; }
+.atajos dd { color: var(--paper-dim); font-size: .88rem; }
+#atajos-modal { z-index: 2500; }   /* por encima del lightbox (2000): se puede abrir la ayuda con una foto abierta */
+.pie-links { margin-top: 10px; display: flex; justify-content: center; gap: 18px; }
+.pie-links button { background: none; border: none; color: var(--film); font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.pie-links button:hover { color: var(--safelight); }
+
+@media (max-width: 768px) { .btn-tema { top: 30px; left: 14px; } body.arrastrando::before { font-size: 1.3rem; } }
+
+/* ---------- Lightbox: siempre oscuro, sea cual sea el tema ----------
+   Una foto se ve mejor sobre negro. Al redeclarar las variables EN este elemento, todo lo que
+   contiene usa los colores oscuros aunque el resto de la página esté en tema claro. */
+.lightbox { --dark: #121212; --panel: #1B1A17; --panel-raised: #221F1B; --paper: #F4F1E8; --paper-dim: #B9B4A6; --film: #8C877A;
+    --line: rgba(244, 241, 232, .12); --line-strong: rgba(244, 241, 232, .24); --safelight: #FF5A1F; --safelight-dim: rgba(255, 90, 31, .14); }
+
+/* ---------- Tema claro ("luz de día") ----------
+   Se invierten los roles de las variables base. Las tiras de película y los fotogramas siguen oscuros a propósito:
+   el negativo es oscuro también a la luz del día. */
+[data-tema="claro"] {
+    color-scheme: light;
+    --dark: #F4F1E8; --panel: #EBE6D9; --panel-raised: #FFFDF7;
+    --paper: #1B1A17; --paper-dim: #4A463E; --film: #6E695C;
+    --safelight: #C73A08; --safelight-dim: rgba(199, 58, 8, .11);   /* naranja más oscuro: sobre papel claro necesita más contraste */
+    --line: rgba(27, 26, 23, .14); --line-strong: rgba(27, 26, 23, .3);
+    --tally: #C62828; --ok: #2E7D32; --warn: #B26A00;
+    --shadow: 0 12px 40px rgba(60, 50, 30, .2);
+}
+/* Lo que tenía colores fijos pensados para fondo oscuro: */
+[data-tema="claro"] .btn-add, [data-tema="claro"] .btn-ok, [data-tema="claro"] .btn-submit, [data-tema="claro"] .skip-link { color: #fff; }
+[data-tema="claro"] .card-badge { background: rgba(27, 26, 23, .86); color: #F4F1E8; }
+[data-tema="claro"] .admin-tag, [data-tema="claro"] .card-badge.nuevo { background: var(--safelight); color: #fff; }
+[data-tema="claro"] .facade, [data-tema="claro"] .facade-label { color: #F4F1E8; }
+[data-tema="claro"] .modal { background: rgba(27, 26, 23, .55); }
+[data-tema="claro"] body::after { opacity: .035; }
+/* Perforaciones de la tira: en tema claro los agujeros dejan ver el papel (crema), como en un negativo real. */
+[data-tema="claro"] header::before, [data-tema="claro"] main::before, [data-tema="claro"] footer::before {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='16'%3E%3Crect x='7' y='4' width='10' height='8' rx='2' fill='%23F4F1E8'/%3E%3C/svg%3E") 0 0 / 24px 16px repeat-x, #1d1b17;
+}
