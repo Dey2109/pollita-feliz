@@ -660,4 +660,5 @@ $('buscador').addEventListener('input', (e) => { // debounce: espera a que dejes
     temporizador = setTimeout(() => { estado.busqueda = e.target.value.trim(); estado.pagina = 1; mostrarPagina(); }, 200);
 });
 
-console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px;font-weight:bold;');
+console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px; font-weight:bold;');
+console.log("%cFUNCIONA ESTA MIERDA, VAMOOOOOS!!!", 'color:#4caf50; font-weight:bold;');
