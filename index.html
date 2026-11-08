@@ -63,6 +63,13 @@
             <button class="filtro" data-filtro="imagen">Imágenes</button>
             <button class="filtro" data-filtro="video">Videos</button>
             <button class="filtro" data-filtro="papelera" id="filtro-papelera" hidden><i class="fas fa-trash-can"></i> Papelera</button>
+            <label class="orden-wrap"><span>Orden</span>
+                <select id="orden" aria-label="Ordenar la galería">
+                    <option value="subida">Recién subidas</option>
+                    <option value="foto">Fecha de la foto</option>
+                    <option value="queridas">Más queridas</option>
+                </select>
+            </label>
         </div>
 
         <div id="loading-skeleton" class="grid">
@@ -104,6 +111,8 @@
                             <input type="file" id="video-archivo" multiple accept="video/mp4,video/webm,image/jpeg,image/png,image/gif,image/webp">
                         </div>
                         <small id="file-name"></small>
+                        <!-- Vista previa de lo elegido, con botón para editar cada imagen -->
+                        <div id="previas" class="previas" aria-label="Archivos elegidos"></div>
                     </div>
                 </div>
                 <div id="seccion-link" style="display:none;">
@@ -112,10 +121,8 @@
                         <input type="url" id="video-link" placeholder="https://...">
                     </div>
                 </div>
-                <div class="progress-wrap" id="progress-container" style="display:none;">
-                    <div class="progress-bar" id="progress-bar"></div>
-                    <span id="progress-text">0%</span>
-                </div>
+                <!-- Cola de subida: una fila por archivo, con su barra, cancelar y reintentar -->
+                <ul id="cola-subida" class="cola" aria-live="polite" aria-label="Archivos en la cola de subida"></ul>
                 <button type="submit" class="btn-submit" id="btn-submit">Publicar</button>
             </form>
         </div>
@@ -125,11 +132,15 @@
     <div id="pin-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
         <div class="modal-box small">
             <h3 id="pin-modal-title">Ingresa la clave</h3>
-            <input type="password" id="pin-modal-input" class="pin-input" placeholder="Clave">
-            <div class="modal-actions">
-                <button id="pin-modal-cancel" class="btn-cancel">Cancelar</button>
-                <button id="pin-modal-confirm" class="btn-ok">Confirmar</button>
-            </div>
+            <!-- Un campo de clave suelto (fuera de un <form>) hace que Chrome avise y que los gestores de contraseñas se confundan.
+                 Los botones "Cancelar" llevan type="button" para que no envíen el formulario. -->
+            <form id="pin-form" autocomplete="off">
+                <input type="password" id="pin-modal-input" class="pin-input" placeholder="Clave" autocomplete="off">
+                <div class="modal-actions">
+                    <button type="button" id="pin-modal-cancel" class="btn-cancel">Cancelar</button>
+                    <button type="submit" id="pin-modal-confirm" class="btn-ok">Confirmar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -141,6 +152,31 @@
             <div class="modal-actions">
                 <button id="confirm-modal-cancel" class="btn-cancel">Cancelar</button>
                 <button id="confirm-modal-ok" class="btn-danger">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDITOR DE IMÁGENES -->
+    <div id="editor-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editor-titulo">
+        <div class="modal-box editor">
+            <h3 id="editor-titulo">Editar imagen</h3>
+            <div class="editor-lienzo"><canvas id="editor-canvas" width="480" height="360" aria-label="Vista previa. Arrastra para mover el recorte"></canvas></div>
+            <div class="editor-barra">
+                <button type="button" id="ed-izq" class="cola-btn" title="Girar a la izquierda" aria-label="Girar a la izquierda"><i class="fas fa-rotate-left"></i></button>
+                <button type="button" id="ed-der" class="cola-btn" title="Girar a la derecha" aria-label="Girar a la derecha"><i class="fas fa-rotate-right"></i></button>
+                <button type="button" id="ed-voltear" class="cola-btn" title="Voltear" aria-label="Voltear"><i class="fas fa-left-right"></i></button>
+            </div>
+            <div class="editor-aspectos" role="group" aria-label="Proporción del recorte">
+                <button type="button" class="chip-ed active" data-aspecto="0">Original</button>
+                <button type="button" class="chip-ed" data-aspecto="1">1:1</button>
+                <button type="button" class="chip-ed" data-aspecto="1.3333">4:3</button>
+                <button type="button" class="chip-ed" data-aspecto="0.75">3:4</button>
+                <button type="button" class="chip-ed" data-aspecto="1.7778">16:9</button>
+            </div>
+            <label class="editor-zoom"><span>Zoom</span><input type="range" id="ed-zoom" min="1" max="3" step="0.01" value="1"></label>
+            <div class="modal-actions">
+                <button type="button" id="ed-cancelar" class="btn-cancel">Cancelar</button>
+                <button type="button" id="ed-aplicar" class="btn-ok">Aplicar</button>
             </div>
         </div>
     </div>

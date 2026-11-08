@@ -94,7 +94,7 @@ main { width: 100%; flex: 1; padding: 0 24px 70px; }
 .btn-danger { background: var(--tally); border: none; color: var(--paper); }
 .btn-danger:hover { filter: brightness(1.12); }
 
-.filtros { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 30px; }
+.filtros { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; max-width: 760px; margin: 0 auto 30px; }   /* mismo eje central que el buscador */
 .filtro { padding: 8px 20px; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--paper-dim); font: 500 .82rem var(--sans); transition: all .2s; }
 .filtro:hover { border-color: var(--safelight); color: var(--safelight); background: var(--safelight-dim); }
 .filtro.active { color: var(--safelight); background: var(--safelight-dim); border-color: rgba(255, 90, 31, .35); }
@@ -330,3 +330,72 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; border: 1px soli
 [data-tema="claro"] header::before, [data-tema="claro"] main::before, [data-tema="claro"] footer::before {
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='16'%3E%3Crect x='7' y='4' width='10' height='8' rx='2' fill='%23F4F1E8'/%3E%3C/svg%3E") 0 0 / 24px 16px repeat-x, #1d1b17;
 }
+
+/* =====================================================================
+   TANDA 5: cola de subida, selector de orden y fecha en la tarjeta
+   ===================================================================== */
+.cola { list-style: none; display: grid; gap: 10px; margin: 4px 0 16px; }
+.cola:empty { display: none; }
+.cola-fila { padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); transition: border-color .2s, opacity .2s; }
+.cola-linea { display: flex; align-items: center; gap: 10px; font-size: .82rem; }
+.cola-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cola-estado { font: 500 .7rem var(--mono); letter-spacing: .04em; color: var(--film); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.cola-acciones { display: flex; gap: 4px; }
+.cola-btn { min-width: 28px; height: 28px; padding: 0 8px; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--paper-dim); font: 600 .72rem var(--sans); transition: all .2s var(--ease); }
+.cola-btn:hover { border-color: var(--safelight); color: var(--safelight); }
+.cola-barra { height: 4px; margin-top: 8px; overflow: hidden; background: var(--dark); border-radius: 999px; }
+.cola-barra-fill { height: 100%; width: 0; background: var(--safelight); transition: width .25s var(--ease); }
+.cola-fila[data-estado="ok"] .cola-barra-fill { background: var(--ok); }
+.cola-fila[data-estado="ok"] .cola-estado { color: var(--ok); }
+.cola-fila[data-estado="error"] { border-color: var(--tally); }
+.cola-fila[data-estado="error"] .cola-estado { color: var(--tally); }
+.cola-fila[data-estado="error"] .cola-barra-fill { background: var(--tally); }
+.cola-fila[data-estado="duplicado"] { border-color: var(--warn); }
+.cola-fila[data-estado="duplicado"] .cola-estado { color: var(--warn); }
+.cola-fila[data-estado="duplicado"] .cola-barra { display: none; }
+.cola-fila[data-estado="cancelado"] { opacity: .55; }
+
+.orden-wrap { display: flex; align-items: center; gap: 8px; margin-left: 6px; padding-left: 16px; border-left: 1px solid var(--line-strong); font: 500 .68rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--film); }   /* una línea fina lo separa de los filtros, en vez de empujarlo al borde */
+.orden-wrap select { appearance: none; -webkit-appearance: none; padding: 8px 34px 8px 14px; background: var(--panel) no-repeat right 12px center / 10px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%238C877A' stroke-width='1.5' d='M1 1l4 4 4-4'/%3E%3C/svg%3E"); border: 1px solid var(--line-strong); border-radius: 999px; color: var(--paper); font: 500 .8rem var(--sans); letter-spacing: 0; text-transform: none; cursor: pointer; }   /* flecha propia: la nativa se veía blanca y desentonaba */
+.orden-wrap select:focus-visible { outline: 2px solid var(--safelight); outline-offset: 2px; }
+.card-fecha { font: 500 .66rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--film); }
+
+/* =====================================================================
+   TANDA 6: reacciones con emojis, vista previa de archivos y editor de imágenes
+   ===================================================================== */
+@media (max-width: 768px) { .orden-wrap { margin-left: 0; padding-left: 0; border-left: 0; width: 100%; justify-content: center; } }
+
+/* ---------- Reacciones ---------- */
+.reac { position: relative; display: flex; align-items: center; }
+.reac-mia { font-size: .95rem; line-height: 1; }
+.reac-resumen { font-size: .78rem; letter-spacing: -2px; }   /* los emojis se montan un poco: se lee como un grupo */
+.like-btn.reaccionado { color: var(--paper); }
+.reac-paleta { position: absolute; right: -6px; bottom: 100%; display: none; padding-bottom: 8px; z-index: 6; }   /* el padding inferior es un "puente" invisible: el mouse puede subir a la paleta sin que se cierre */
+.reac:hover .reac-paleta, .reac:focus-within .reac-paleta, .reac.abierto .reac-paleta { display: block; animation: bajar .18s var(--ease); }
+.reac-caja { display: flex; gap: 2px; padding: 5px 6px; background: var(--panel-raised); border: 1px solid var(--line-strong); border-radius: 999px; box-shadow: var(--shadow); }
+.reac-op { width: 36px; height: 36px; border: none; border-radius: 50%; background: none; font-size: 1.2rem; line-height: 1; transition: transform .15s var(--ease), background .15s; }
+.reac-op:hover, .reac-op:focus-visible { transform: scale(1.3) translateY(-3px); background: var(--safelight-dim); }
+.reac-op[aria-pressed="true"] { background: var(--safelight-dim); }
+
+/* ---------- Vista previa de lo elegido (antes de publicar) ---------- */
+.previas { display: grid; gap: 8px; margin-top: 10px; }
+.previas:empty { display: none; }
+.previa { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); font-size: .8rem; }
+.previa img, .previa-video { flex-shrink: 0; width: 44px; height: 44px; border-radius: 3px; object-fit: cover; background: #000; }
+.previa-video { display: flex; align-items: center; justify-content: center; color: var(--film); }
+.previa-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Editor de imágenes ---------- */
+#editor-modal { z-index: 1100; }   /* por encima del modal de subida, desde el que se abre */
+.modal-box.editor { max-width: 560px; }
+.editor-lienzo { display: flex; justify-content: center; padding: 10px; background: #000; border: 1px solid var(--line); border-radius: var(--radius); }
+.editor-lienzo canvas { max-width: 100%; height: auto; cursor: grab; touch-action: none; background-image: conic-gradient(#1b1a17 25%, #262420 0 50%, #1b1a17 0 75%, #262420 0); background-size: 16px 16px; }   /* el tablero deja ver si hay huecos transparentes */
+.editor-lienzo canvas:active { cursor: grabbing; }
+.editor-barra { display: flex; justify-content: center; gap: 8px; margin: 14px 0 10px; }
+.editor-barra .cola-btn { width: 40px; height: 40px; font-size: .9rem; }
+.editor-aspectos { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 12px; }
+.chip-ed { padding: 6px 14px; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--paper-dim); font: 500 .76rem var(--mono); transition: all .2s; }
+.chip-ed:hover { border-color: var(--safelight); color: var(--safelight); }
+.chip-ed.active { color: var(--safelight); background: var(--safelight-dim); border-color: rgba(255, 90, 31, .35); }
+.editor-zoom { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font: 500 .68rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--film); }
+.editor-zoom input { flex: 1; accent-color: var(--safelight); }

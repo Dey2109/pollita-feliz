@@ -22,7 +22,7 @@ service cloud.firestore {
 
       // CREAR: sesión válida + datos con forma exacta + 3 segundos entre publicaciones.
       allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['titulo', 'url', 'tipo', 'uid', 'fecha', 'likedBy', 'thumb'])
+        && request.resource.data.keys().hasOnly(['titulo', 'url', 'tipo', 'uid', 'fecha', 'likedBy', 'thumb', 'hash', 'tomada'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.titulo is string
         && request.resource.data.titulo.size() > 0
@@ -35,6 +35,9 @@ service cloud.firestore {
             || (request.resource.data.thumb is string
                 && request.resource.data.thumb.matches('https://.*')
                 && request.resource.data.thumb.size() < 500))
+        // Huella (para avisar de duplicados) y fecha de toma de la foto: opcionales, con tipo y tamaño controlados.
+        && (!('hash' in request.resource.data) || (request.resource.data.hash is string && request.resource.data.hash.size() <= 80))
+        && (!('tomada' in request.resource.data) || request.resource.data.tomada is number)
         && request.resource.data.tipo in ['imagen', 'video', 'enlace']
         && request.resource.data.fecha == request.time            // la fecha la pone el servidor, no el cliente
         && request.resource.data.likedBy.size() == 0              // nadie nace con likes inflados
@@ -59,6 +62,11 @@ service cloud.firestore {
         || ((esDueno() || esAdmin()) && cambia(['borrado']) && request.resource.data.borrado == true)
         // 4) Restaurar de la papelera: solo admin.
         || (esAdmin() && cambia(['borrado']) && request.resource.data.borrado == false)
+        // 5) Reacción con emoji: solo cambia TU entrada dentro del mapa "reac" (uid -> nombre de la reacción).
+        || (cambia(['reac'])
+            && request.resource.data.reac.diff(resource.data.get('reac', {})).affectedKeys().hasOnly([request.auth.uid])
+            && (!(request.auth.uid in request.resource.data.reac)
+                || request.resource.data.reac[request.auth.uid] in ['corazon', 'risa', 'sorpresa', 'triste', 'aplauso']))
       );
 
       // BORRADO REAL: solo el admin (el resto "borra" mandando a la papelera).
