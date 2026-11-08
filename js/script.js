@@ -1057,4 +1057,11 @@ $('ed-aplicar').addEventListener('click', async () => {
     mostrarToast('Edición aplicada', 'success');
 });
 
-console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px;font-weight:bold;');
+console.log('%c🎞️ Pollita Feliz', 'color:#e91e63;font-size:16px;font-weight:bold;margin-bottom:5px;');
+
+// Creamos un grupo cerrado por defecto para las advertencias de seguridad
+console.groupCollapsed('%c⚠️ ¡ADVERTENCIA DE SEGURIDAD! EXPANDE PARA VER MÁS.', 'color:red; font-weight:bold;');
+  console.warn('¡¡¡ATENCIÓN!!!');
+  console.info('Este sitio es de código abierto: https://github.com/Dey2109/pollita-feliz');
+  console.error('No copies ni pegues código aquí a menos que sepas exactamente qué hace. Podrían robar tu sesión o publicar en tu nombre.');
+console.groupEnd();
