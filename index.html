@@ -51,48 +51,84 @@
     </header>
 
     <main id="contenido" tabindex="-1">
-        <div class="toolbar"><h2>Galería</h2></div>
+        <!-- Dos secciones: la galería pública y los álbumes privados (cifrados) -->
+        <nav class="vistas" aria-label="Secciones">
+            <button type="button" class="vista active" data-vista="publico" aria-pressed="true"><i class="fas fa-images"></i> <span>Galería</span></button>
+            <button type="button" class="vista" data-vista="privado" aria-pressed="false"><i class="fas fa-lock"></i> <span>Álbumes privados</span></button>
+        </nav>
 
-        <div class="controles">
-            <input type="search" id="buscador" class="buscador" placeholder="Busca un recuerdo por su título…" aria-label="Buscar por título">
-            <button class="btn-add" id="btn-abrir-modal"><i class="fas fa-plus"></i> Subir</button>
+        <div id="vista-publica">
+            <div class="toolbar"><h2>Galería</h2></div>
+
+            <div class="controles">
+                <input type="search" id="buscador" class="buscador" placeholder="Busca un recuerdo por su título…" aria-label="Buscar por título">
+                <button class="btn-add" id="btn-abrir-modal"><i class="fas fa-plus"></i> Subir</button>
+            </div>
+
+            <div class="filtros">
+                <button class="filtro active" data-filtro="todo">Todo</button>
+                <button class="filtro" data-filtro="imagen">Imágenes</button>
+                <button class="filtro" data-filtro="video">Videos</button>
+                <button class="filtro" data-filtro="papelera" id="filtro-papelera" hidden><i class="fas fa-trash-can"></i> Papelera</button>
+                <label class="orden-wrap"><span>Orden</span>
+                    <select id="orden" aria-label="Ordenar la galería">
+                        <option value="subida">Recién subidas</option>
+                        <option value="foto">Fecha de la foto</option>
+                        <option value="queridas">Más queridas</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="loading-skeleton" class="grid">
+                <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+                <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+            </div>
+
+            <div id="galeria-grid" class="grid"></div>
+
+            <div id="paginacion" class="pagination" style="display:none;">
+                <button id="btn-anterior" aria-label="Página anterior"><i class="fas fa-chevron-left"></i></button>
+                <span id="pagina-info" aria-live="polite">1 / 1</span>
+                <button id="btn-siguiente" aria-label="Página siguiente"><i class="fas fa-chevron-right"></i></button>
+            </div>
+
+            <p id="empty-state" class="empty" style="display:none;">🐣 Aún no hay nada. Sé el primero.</p>
         </div>
 
-        <div class="filtros">
-            <button class="filtro active" data-filtro="todo">Todo</button>
-            <button class="filtro" data-filtro="imagen">Imágenes</button>
-            <button class="filtro" data-filtro="video">Videos</button>
-            <button class="filtro" data-filtro="papelera" id="filtro-papelera" hidden><i class="fas fa-trash-can"></i> Papelera</button>
-            <label class="orden-wrap"><span>Orden</span>
-                <select id="orden" aria-label="Ordenar la galería">
-                    <option value="subida">Recién subidas</option>
-                    <option value="foto">Fecha de la foto</option>
-                    <option value="queridas">Más queridas</option>
-                </select>
-            </label>
-        </div>
-
-        <div id="loading-skeleton" class="grid">
-            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
-            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
-        </div>
-
-        <div id="galeria-grid" class="grid"></div>
-
-        <div id="paginacion" class="pagination" style="display:none;">
-            <button id="btn-anterior" aria-label="Página anterior"><i class="fas fa-chevron-left"></i></button>
-            <span id="pagina-info" aria-live="polite">1 / 1</span>
-            <button id="btn-siguiente" aria-label="Página siguiente"><i class="fas fa-chevron-right"></i></button>
-        </div>
-
-        <p id="empty-state" class="empty" style="display:none;">🐣 Aún no hay nada. Sé el primero.</p>
+        <!-- ÁLBUMES PRIVADOS: todo lo que se sube aquí se cifra en el navegador antes de salir -->
+        <section id="vista-privada" hidden aria-label="Álbumes privados">
+            <div id="priv-lista-wrap">
+                <div class="toolbar"><h2>Álbumes privados</h2></div>
+                <p class="priv-intro">Lo que guardes aquí se <strong>cifra en tu navegador</strong> antes de subirse. Solo tú, con tu frase o PIN, puedes verlo, y no aparece en la galería pública.</p>
+                <div id="priv-lista" class="album-lista"></div>
+                <div class="priv-acciones">
+                    <button type="button" id="btn-crear-album" class="btn-add"><i class="fas fa-plus"></i> <span>Crear álbum</span></button>
+                    <button type="button" id="btn-abrir-codigo" class="btn-cancel"><i class="fas fa-key"></i> <span>Abrir con un código</span></button>
+                </div>
+            </div>
+            <div id="priv-album" hidden>
+                <div class="priv-barra">
+                    <h2 id="priv-nombre"></h2>
+                    <div class="priv-botones">
+                        <button type="button" id="priv-subir" class="btn-add"><i class="fas fa-plus"></i> <span>Subir</span></button>
+                        <button type="button" id="priv-codigo" class="btn-cancel"><i class="fas fa-key"></i> <span>Código</span></button>
+                        <button type="button" id="priv-bloquear" class="btn-cancel"><i class="fas fa-lock"></i> <span>Bloquear</span></button>
+                        <button type="button" id="priv-eliminar" class="btn-cancel danger"><i class="fas fa-trash"></i> <span>Eliminar álbum</span></button>
+                    </div>
+                </div>
+                <p id="priv-lectura" class="priv-nota" hidden>Estás en un dispositivo distinto del que creó el álbum: puedes verlo y descargarlo, pero no subir ni borrar.</p>
+                <div id="priv-grid" class="grid"></div>
+                <p id="priv-vacio" class="empty" hidden>Este álbum está vacío. Sube tu primera foto o video.</p>
+            </div>
+        </section>
     </main>
 
     <!-- MODAL SUBIR -->
     <div id="modal-subida" class="modal" role="dialog" aria-modal="true" aria-label="Subir al rollo">
         <div class="modal-box">
             <button class="modal-close" id="btn-cerrar-modal" aria-label="Cerrar">&times;</button>
-            <h3>Subir al rollo</h3>
+            <h3 id="subida-titulo">Subir al rollo</h3>
+            <p id="priv-aviso-subida" class="priv-nota" hidden>Se cifrará en tu navegador antes de salir. Máximo 19 MB por archivo.</p>
             <div class="tabs">
                 <button class="tab active" data-tipo="archivo"><i class="fas fa-upload"></i> Archivo</button>
                 <button class="tab" data-tipo="link"><i class="fas fa-link"></i> Link</button>
@@ -154,6 +190,79 @@
                 <button id="confirm-modal-ok" class="btn-danger">Eliminar</button>
             </div>
         </div>
+    </div>
+
+    <!-- ÁLBUM PRIVADO: crear -->
+    <div id="album-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="album-titulo">
+        <div class="modal-box">
+            <button type="button" class="modal-close" id="album-cerrar" aria-label="Cerrar">&times;</button>
+            <h3 id="album-titulo">Nuevo álbum privado</h3>
+            <p class="priv-nota">Lo que subas se <strong>cifra en tu navegador</strong> antes de salir: ni Telegram, ni Firebase, ni el dueño del sitio pueden verlo. Si olvidas tu secreto <em>y</em> pierdes la clave de recuperación, nadie podrá recuperarlo.</p>
+            <form id="form-album" autocomplete="off">
+                <div class="field"><label for="album-nombre">Nombre del álbum</label><input type="text" id="album-nombre" maxlength="40" required placeholder="Ej: Mis recuerdos"></div>
+                <fieldset class="metodos"><legend>Método de desbloqueo</legend>
+                    <label class="metodo"><input type="radio" name="metodo" value="frase" checked><span><strong>Frase secreta</strong> · recomendado, cifrado fuerte</span></label>
+                    <label class="metodo"><input type="radio" name="metodo" value="pin"><span><strong>PIN numérico</strong> · más cómodo, pero más fácil de adivinar</span></label>
+                </fieldset>
+                <div class="field"><label for="album-secreto" id="album-secreto-etq">Frase secreta (mínimo 10 caracteres)</label><input type="password" id="album-secreto" required autocomplete="new-password"></div>
+                <div class="field"><label for="album-secreto2">Repítela</label><input type="password" id="album-secreto2" required autocomplete="new-password"></div>
+                <label class="check"><input type="checkbox" id="album-entiendo" required><span>Entiendo que no hay forma de recuperar mis archivos sin mi secreto o la clave de recuperación.</span></label>
+                <p id="album-error" class="form-error" role="alert" hidden></p>
+                <button type="submit" class="btn-submit" id="album-crear">Crear álbum</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ÁLBUM PRIVADO: guardar códigos (se muestran UNA vez) -->
+    <div id="guardar-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="guardar-titulo">
+        <div class="modal-box">
+            <h3 id="guardar-titulo">Guarda estos códigos</h3>
+            <p class="priv-nota">Se muestran <strong>una sola vez</strong>. Anótalos en un lugar seguro: sin tu secreto y sin la clave de recuperación, nadie podrá abrir tu álbum.</p>
+            <div class="codigo-caja"><span class="codigo-etq">Código del álbum</span><code id="guardar-id"></code><button type="button" class="cola-btn" data-copiar="guardar-id" title="Copiar" aria-label="Copiar el código del álbum"><i class="far fa-copy"></i></button></div>
+            <div class="codigo-caja"><span class="codigo-etq">Clave de recuperación</span><code id="guardar-recup"></code><button type="button" class="cola-btn" data-copiar="guardar-recup" title="Copiar" aria-label="Copiar la clave de recuperación"><i class="far fa-copy"></i></button></div>
+            <label class="check"><input type="checkbox" id="guardar-ok"><span>Ya los guardé en un lugar seguro</span></label>
+            <div class="modal-actions"><button type="button" id="guardar-continuar" class="btn-ok" disabled>Continuar</button></div>
+        </div>
+    </div>
+
+    <!-- ÁLBUM PRIVADO: desbloquear -->
+    <div id="desbloqueo-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="desbloqueo-titulo">
+        <div class="modal-box small">
+            <h3 id="desbloqueo-titulo">Desbloquear álbum</h3>
+            <form id="form-desbloqueo" autocomplete="off">
+                <input type="password" id="desbloqueo-input" class="pin-input" placeholder="Frase secreta" autocomplete="off">
+                <p id="desbloqueo-error" class="form-error" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="desbloqueo-cancelar" class="btn-cancel">Cancelar</button>
+                    <button type="submit" id="desbloqueo-ok" class="btn-ok">Desbloquear</button>
+                </div>
+                <button type="button" id="desbloqueo-recup" class="link-btn">Usé una clave de recuperación</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ÁLBUM PRIVADO: abrir con un código -->
+    <div id="codigo-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="codigo-titulo">
+        <div class="modal-box small">
+            <h3 id="codigo-titulo">Abrir con un código</h3>
+            <form id="form-codigo" autocomplete="off">
+                <input type="text" id="codigo-input" class="pin-input codigo-input" placeholder="XXXX-XXXX-XXXX-…" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                <p id="codigo-error" class="form-error" role="alert" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" id="codigo-cancelar" class="btn-cancel">Cancelar</button>
+                    <button type="submit" class="btn-ok">Abrir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ÁLBUM PRIVADO: visor (usa la misma estética del lightbox) -->
+    <div id="visor-priv" class="lightbox" role="dialog" aria-modal="true" aria-label="Vista del álbum privado">
+        <button type="button" class="lb-close" id="visor-cerrar" aria-label="Cerrar">&times;</button>
+        <button type="button" class="lb-nav lb-prev" id="visor-prev" aria-label="Anterior"><i class="fas fa-chevron-left"></i></button>
+        <div id="visor-medio" class="visor-medio"></div>
+        <button type="button" class="lb-nav lb-next" id="visor-next" aria-label="Siguiente"><i class="fas fa-chevron-right"></i></button>
+        <div class="lb-info"><div id="visor-titulo"></div><div id="visor-contador"></div></div>
     </div>
 
     <!-- EDITOR DE IMÁGENES -->

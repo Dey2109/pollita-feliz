@@ -399,3 +399,56 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 7px; border: 1px soli
 .chip-ed.active { color: var(--safelight); background: var(--safelight-dim); border-color: rgba(255, 90, 31, .35); }
 .editor-zoom { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font: 500 .68rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--film); }
 .editor-zoom input { flex: 1; accent-color: var(--safelight); }
+
+/* =====================================================================
+   TANDA 7: álbumes privados
+   ===================================================================== */
+.vistas { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 auto 28px; }
+.vista { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--paper-dim); font: 500 .86rem var(--sans); transition: all .2s; }
+.vista:hover { border-color: var(--safelight); color: var(--safelight); }
+.vista.active { color: var(--safelight); background: var(--safelight-dim); border-color: rgba(255, 90, 31, .35); }
+.vista i { font-size: .8rem; }
+
+.priv-intro { max-width: 620px; margin: 0 auto 24px; text-align: center; color: var(--paper-dim); font-size: .92rem; line-height: 1.6; }
+.priv-nota { margin-bottom: 16px; padding: 10px 14px; background: var(--safelight-dim); border-left: 3px solid var(--safelight); border-radius: 0 var(--radius) var(--radius) 0; color: var(--paper-dim); font-size: .82rem; line-height: 1.55; text-align: left; }
+.priv-nota strong { color: var(--paper); }
+.album-lista { display: grid; gap: 12px; max-width: 640px; margin: 0 auto 24px; }
+.album-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); transition: border-color .2s; }
+.album-card:hover { border-color: var(--line-strong); }
+.album-icono { flex-shrink: 0; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--safelight); }
+.album-datos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.album-datos strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 1.05rem var(--serif); }
+.album-meta { font: 500 .66rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--film); }
+.album-botones { display: flex; align-items: center; gap: 8px; }
+.priv-vacio-lista { padding: 26px 16px; text-align: center; color: var(--film); font-size: .9rem; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.priv-acciones { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
+.priv-acciones .btn-add, .priv-botones .btn-add { padding: 10px 20px; }
+.priv-acciones .btn-cancel, .priv-botones .btn-cancel { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; }
+.priv-barra { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; max-width: 1240px; margin: 0 auto 20px; }
+.priv-barra h2 { font: italic 500 1.7rem var(--serif); letter-spacing: -.01em; }
+.priv-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-cancel.danger:hover { border-color: var(--tally); color: var(--tally); }
+#priv-lectura { max-width: 1240px; margin-inline: auto; }
+.priv-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--panel); color: var(--film); font-size: 2rem; }
+
+.metodos { margin-bottom: 16px; padding: 0; border: none; }
+.metodos legend { margin-bottom: 8px; padding: 0; font: 500 .68rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--film); }
+.metodo, .check { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; font-size: .84rem; line-height: 1.45; color: var(--paper-dim); cursor: pointer; }
+.metodo input, .check input { margin-top: 3px; accent-color: var(--safelight); }
+.metodo strong { color: var(--paper); }
+.check { margin: 14px 0; }
+.form-error { margin: 8px 0 12px; color: var(--tally); font: .76rem var(--mono); line-height: 1.5; }
+.codigo-caja { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; margin-bottom: 12px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.codigo-etq { grid-column: 1 / -1; font: 500 .66rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--film); }
+.codigo-caja code { font: 500 .92rem var(--mono); letter-spacing: .06em; word-break: break-all; color: var(--paper); user-select: all; }
+.codigo-input { letter-spacing: .08em; text-transform: uppercase; }
+.link-btn { display: block; margin: 16px auto 0; background: none; border: none; color: var(--film); font: .78rem var(--sans); text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:hover { color: var(--safelight); }
+#guardar-modal { z-index: 1200; }
+
+.visor-medio { display: contents; }   /* el contenido del visor participa en el centrado del .lightbox */
+.visor-medio img, .visor-medio video { max-width: 90%; max-height: 80%; object-fit: contain; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--panel); box-shadow: 0 30px 90px rgba(0, 0, 0, .7); }
+.visor-cargando { color: var(--film); font: italic 500 1.1rem var(--serif); }
+#visor-titulo { font: italic 500 1rem var(--serif); }
+#visor-contador { font: .7rem var(--mono); letter-spacing: .1em; color: var(--film); }
+@media (max-width: 768px) { .album-card { flex-wrap: wrap; } .album-botones { width: 100%; justify-content: flex-end; } .priv-barra { justify-content: center; text-align: center; } .priv-botones { justify-content: center; } }

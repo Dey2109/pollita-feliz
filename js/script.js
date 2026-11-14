@@ -5,7 +5,8 @@
 // de admin: la seguridad real vive en Firebase Auth + reglas de Firestore.
 // =====================================================================
 import { db, auth, WORKER_URL } from './config.js';
-import { collection, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, updateDoc, arrayUnion, arrayRemove, writeBatch, deleteField }
+import { crearAlbumCripto, abrirAlbumCripto, cifrarBytes, descifrarBytes, cifrarJSON, descifrarJSON, aB64, deB64, agrupar, normalizarCodigo, validarSecreto, CODIGO_VALIDO } from './cripto.js';
+import { collection, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, updateDoc, arrayUnion, arrayRemove, writeBatch, deleteField, getDoc }
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -28,7 +29,7 @@ const esNuevo = (i) => VISITA_PREVIA > 0 && i.uid !== estado.user?.uid && (i.fec
 const ITEMS_POR_PAGINA = 15;
 
 // Un solo objeto de estado: así es fácil saber qué datos mueven la pantalla.
-const estado = { user: null, items: [], imagenes: [], visibles: [], filtro: 'todo', busqueda: '', pagina: 1, tipoSubida: 'archivo', lbIdx: 0, subiendo: false, listo: false, foco: null, cola: [], titulo: '', orden: 'subida', seleccion: [] };
+const estado = { user: null, items: [], imagenes: [], visibles: [], filtro: 'todo', busqueda: '', pagina: 1, tipoSubida: 'archivo', lbIdx: 0, subiendo: false, listo: false, foco: null, cola: [], titulo: '', orden: 'subida', seleccion: [], vista: 'publico', destino: null, privado: null };
 
 // Admin = usuario con correo/clave (no anónimo). OJO: esto solo cambia la UI;
 // quien realmente manda es firestore.rules, que valida en el servidor.
@@ -541,7 +542,8 @@ document.addEventListener('keydown', (e) => {
     const ayudaAbierta = $('atajos-modal').classList.contains('active');
     const escribiendo = /^(input|textarea|select)$/i.test(e.target.tagName);
     if (e.key === 'Escape') { // cierra lo que esté más "arriba"
-        if ($('editor-modal').classList.contains('active')) cerrarEditor();
+        if (cerrarPrivTop()) { /* se cerró un modal de los álbumes privados */ }
+        else if ($('editor-modal').classList.contains('active')) cerrarEditor();
         else if ($('pin-modal').classList.contains('active')) $('pin-modal-cancel').click();
         else if ($('confirm-modal').classList.contains('active')) $('confirm-modal-cancel').click();
         else if (ayudaAbierta) $('atajos-modal').classList.remove('active');
@@ -638,14 +640,18 @@ function fotogramaDeVideo(file) {
         setTimeout(() => { limpiar(); reject(new Error('Tiempo agotado')); }, 8000);
     });
 }
-async function subirMiniatura(file, ctl = {}) {
-    if (file.type === 'image/gif') return null; // un GIF sin animar pierde la gracia: se usa el original
+// Miniatura (~480px) de una imagen o de un fotograma de video, como Blob JPEG (o null si no se puede).
+async function miniaturaBlob(file, incluirGif = false) {
+    if (file.type === 'image/gif' && !incluirGif) return null; // un GIF sin animar pierde la gracia: en la galería pública se usa el original
     const fuente = file.type.startsWith('image/') ? await createImageBitmap(file) : await fotogramaDeVideo(file);
     const esc = Math.min(1, 480 / fuente.width);
     const c = document.createElement('canvas');
     c.width = Math.round(fuente.width * esc); c.height = Math.round(fuente.height * esc);
     c.getContext('2d').drawImage(fuente, 0, 0, c.width, c.height);
-    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.8));
+    return await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.8));
+}
+async function subirMiniatura(file, ctl = {}) {
+    const blob = await miniaturaBlob(file);
     if (!blob) return null;
     return (await subirATelegram(new File([blob], 'miniatura.jpg', { type: 'image/jpeg' }), () => {}, ctl)).url;
 }
@@ -779,7 +785,7 @@ function actualizarBoton() {
     const fallidos = estado.cola.filter((j) => j.estado === 'error').length;
     b.disabled = estado.subiendo;
     if (estado.subiendo) b.textContent = `Subiendo ${estado.cola.filter((j) => j.estado === 'ok').length + 1}/${estado.cola.filter((j) => j.estado !== 'cancelado').length}…`;
-    else b.textContent = fallidos ? `Reintentar fallidos (${fallidos})` : 'Publicar';
+    else b.textContent = fallidos ? `Reintentar fallidos (${fallidos})` : (estado.destino ? 'Cifrar y subir' : 'Publicar');
 }
 function limpiarCola() { estado.cola = []; $('cola-subida').replaceChildren(); $('previas').hidden = false; actualizarBoton(); }
 
@@ -799,6 +805,12 @@ async function subirJob(job) {
     job.estado = 'subiendo'; job.progreso = 0; job.msg = ''; pintarFila(job);
     const abortado = () => job.estado === 'cancelado'; // la persona pudo cancelar mientras esperábamos algo asíncrono
     try {
+        if (job.destino) {   // álbum privado: otro camino (cifrar, subir, guardar dentro del álbum)
+            await subirPrivado(job, abortado);
+            if (abortado()) return;
+            ultimaPublicacion = Date.now(); job.estado = 'ok'; job.progreso = 100; pintarFila(job);
+            return;
+        }
         let url, tipo, thumb = null;
         if (job.link) { url = job.link; tipo = 'enlace'; }
         else {
@@ -856,7 +868,7 @@ $('form-subida').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (estado.subiendo) return; // evita doble clic = doble publicación
     const titulo = $('video-titulo').value.trim();
-    if (!titulo) return mostrarToast('El título es obligatorio', 'warning');
+    if (!titulo && !estado.destino) return mostrarToast('El título es obligatorio', 'warning'); // en privado no hay título: se usa el nombre del archivo
     // Sin sesión no hay uid, y sin uid las reglas no dejarían guardar ni borrar.
     if (!estado.user) return mostrarToast('Aún no hay sesión. Recarga la página.', 'warning');
     estado.titulo = titulo;
@@ -872,9 +884,11 @@ $('form-subida').addEventListener('submit', async (e) => {
             if (!files.length) return mostrarToast('Selecciona al menos un archivo', 'warning');
             const grande = files.find((f) => !f.type.startsWith('image/') && f.size > 200 * 1024 * 1024);
             if (grande) return mostrarToast(`"${grande.name}" pesa más de 200MB`, 'warning');
+            const pesado = estado.destino && files.find((f) => !f.type.startsWith('image/') && f.size > LIMITE_PRIVADO);
+            if (pesado) return mostrarToast(`"${pesado.name}" pesa más de 19MB (el máximo en álbumes privados)`, 'warning');
             origenes = files.map((file) => ({ file }));
         }
-        estado.cola = origenes.map(crearJob);
+        estado.cola = origenes.map((o, i) => crearJob({ ...o, destino: estado.destino }, i)); // cada trabajo recuerda su destino, aunque luego cambies de pantalla
         estado.cola.forEach(pintarFila);
         $('previas').hidden = true; // ya están en la cola: no mostrarlos dos veces
     } else {                     // ya había cola: el botón funciona como "Reintentar fallidos"
@@ -901,7 +915,7 @@ function cambiarTab(tipo) {
 }
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => cambiarTab(b.dataset.tipo)));
 
-$('btn-abrir-modal').addEventListener('click', () => $('modal-subida').classList.add('active'));
+$('btn-abrir-modal').addEventListener('click', () => abrirSubida());
 $('btn-cerrar-modal').addEventListener('click', () => $('modal-subida').classList.remove('active'));
 $('modal-subida').addEventListener('click', (e) => { if (e.target === $('modal-subida')) $('modal-subida').classList.remove('active'); });
 
@@ -953,12 +967,15 @@ $('buscador').addEventListener('input', (e) => { // debounce: espera a que dejes
 function recibirArchivos(lista) {
     const files = [...lista].filter((f) => /^(image|video)\//.test(f.type));
     if (!files.length) return false;
+    // Dentro de los álbumes privados, soltar o pegar archivos los manda al álbum abierto (o avisa si no hay uno desbloqueado).
+    const destino = estado.vista === 'privado' ? destinoActual() : null;
+    if (estado.vista === 'privado' && !destino) { mostrarToast('Abre un álbum tuyo para subir archivos', 'warning'); return true; }
     cambiarTab('archivo');
     const dt = new DataTransfer(); // un <input type="file"> solo acepta archivos a través de un DataTransfer
     files.forEach((f) => dt.items.add(f));
     $('video-archivo').files = dt.files;
     $('video-archivo').dispatchEvent(new Event('change')); // para que se actualice el texto "N archivos"
-    $('modal-subida').classList.add('active');
+    abrirSubida(destino);
     $('video-titulo').focus();
     return true;
 }
@@ -1057,11 +1074,331 @@ $('ed-aplicar').addEventListener('click', async () => {
     mostrarToast('Edición aplicada', 'success');
 });
 
-console.log('%c🎞️ Pollita Feliz', 'color:#e91e63;font-size:16px;font-weight:bold;margin-bottom:5px;');
+// =====================================================================
+// ÁLBUMES PRIVADOS (el esquema de cifrado está explicado en cripto.js)
+// Regla de oro: la llave maestra solo vive en MEMORIA (estado.privado.mk). Nunca va a localStorage ni a Firestore.
+// =====================================================================
+const ALBUMES_PRIVADOS = true;            // interruptor: en false se oculta toda la sección
+const LIMITE_PRIVADO = 19 * 1024 * 1024;  // un bot de Telegram solo descarga hasta 20 MB; el cifrado añade 16 bytes
+const AUTOBLOQUEO_MS = 5 * 60 * 1000;     // sin actividad: el álbum se bloquea solo
+const OCULTO_MS = 2 * 60 * 1000;          // con la pestaña en segundo plano se bloquea antes
 
-// Creamos un grupo cerrado por defecto para las advertencias de seguridad
-console.groupCollapsed('%c⚠️ ¡ADVERTENCIA DE SEGURIDAD! EXPANDE PARA VER MÁS.', 'color:red; font-weight:bold;');
-  console.warn('¡¡¡ATENCIÓN!!!');
-  console.info('Este sitio es de código abierto: https://github.com/Dey2109/pollita-feliz');
-  console.error('No copies ni pegues código aquí a menos que sepas exactamente qué hace. Podrían robar tu sesión o publicar en tu nombre.');
-console.groupEnd();
+// Este dispositivo recuerda SOLO el código, el nombre y el método de cada álbum: nada que lo abra por sí solo.
+const leerAlbumes = () => { try { return JSON.parse(ls.get('pf_albumes') || '[]'); } catch { return []; } };
+const guardarAlbumes = (l) => ls.set('pf_albumes', JSON.stringify(l));
+const recordarAlbum = (a) => guardarAlbumes([a, ...leerAlbumes().filter((x) => x.id !== a.id)]);
+
+if (!ALBUMES_PRIVADOS) document.querySelector('.vistas').hidden = true;
+function cambiarVista(v) {
+    if (v !== 'privado') bloquearAlbum(); // salir de la sección privada bloquea el álbum abierto
+    estado.vista = v;
+    $('vista-publica').hidden = v !== 'publico'; $('vista-privada').hidden = v !== 'privado';
+    document.querySelectorAll('.vista').forEach((b) => { const on = b.dataset.vista === v; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+    if (v === 'privado') pintarAlbumes();
+}
+document.querySelectorAll('.vista').forEach((b) => b.addEventListener('click', () => cambiarVista(b.dataset.vista)));
+
+// Abre el modal de subida en uno de dos modos: público (por defecto) o hacia un álbum privado (destino = { id, mk, nombre }).
+function abrirSubida(destino = null) {
+    estado.destino = destino;
+    const priv = !!destino;
+    $('subida-titulo').textContent = priv ? `Subir a «${destino.nombre}»` : 'Subir al rollo';
+    $('priv-aviso-subida').hidden = !priv;
+    $('video-titulo').closest('.field').hidden = priv; // en privado el título es el nombre del archivo, y se guarda cifrado
+    $('video-titulo').required = !priv;
+    document.querySelector('#modal-subida .tabs').hidden = priv; // un link externo no se puede cifrar
+    if (priv) cambiarTab('archivo');
+    actualizarBoton();
+    $('modal-subida').classList.add('active');
+}
+const destinoActual = () => estado.privado?.propio ? { id: estado.privado.id, mk: estado.privado.mk, nombre: estado.privado.nombre } : null;
+
+// ---------- Lista de álbumes de este dispositivo ----------
+function pintarAlbumes() {
+    const lista = leerAlbumes();
+    $('priv-lista').replaceChildren(...(lista.length ? lista.map((a) => el('article', { class: 'album-card' },
+        el('div', { class: 'album-icono' }, icono('fas fa-lock')),
+        el('div', { class: 'album-datos' }, el('strong', { text: a.nombre || 'Álbum privado' }),
+            el('span', { class: 'album-meta', text: `${a.metodo === 'pin' ? 'PIN' : 'Frase secreta'} · ${agrupar(a.id).slice(0, 9)}…` })),
+        el('div', { class: 'album-botones' },
+            btnCola('Quitar de este dispositivo', icono('fas fa-xmark'), () => quitarAlbumLocal(a)),
+            el('button', { type: 'button', class: 'btn-ok', text: 'Abrir', onclick: () => pedirDesbloqueo(a) }))))
+        : [el('p', { class: 'priv-vacio-lista', text: 'Aún no tienes álbumes en este dispositivo. Crea uno, o ábrelo con su código.' })]));
+}
+async function quitarAlbumLocal(a) {
+    if (!(await confirmar('Quitar álbum', 'Solo se quita de este dispositivo. Tus archivos siguen guardados: podrás volver a abrirlo con su código y tu secreto.', 'Quitar'))) return;
+    guardarAlbumes(leerAlbumes().filter((x) => x.id !== a.id)); pintarAlbumes();
+}
+
+// ---------- Crear un álbum ----------
+const metodoElegido = () => document.querySelector('input[name="metodo"]:checked').value;
+function ajustarMetodo() {
+    const pin = metodoElegido() === 'pin';
+    $('album-secreto-etq').textContent = pin ? 'PIN (6 a 12 dígitos)' : 'Frase secreta (mínimo 10 caracteres)';
+    for (const id of ['album-secreto', 'album-secreto2']) { $(id).inputMode = pin ? 'numeric' : 'text'; $(id).value = ''; }
+}
+document.querySelectorAll('input[name="metodo"]').forEach((r) => r.addEventListener('change', ajustarMetodo));
+$('btn-crear-album').addEventListener('click', () => { $('form-album').reset(); ajustarMetodo(); $('album-error').hidden = true; $('album-modal').classList.add('active'); $('album-nombre').focus(); });
+$('album-cerrar').addEventListener('click', () => $('album-modal').classList.remove('active'));
+$('form-album').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = (m) => { $('album-error').textContent = m; $('album-error').hidden = false; };
+    if (!estado.user) return err('Aún no hay sesión. Recarga la página.');
+    const nombre = $('album-nombre').value.trim(), metodo = metodoElegido(), s1 = $('album-secreto').value, s2 = $('album-secreto2').value;
+    if (!nombre) return err('Ponle un nombre al álbum');
+    const malo = validarSecreto(s1, metodo); if (malo) return err(malo);
+    if (s1 !== s2) return err('Los dos secretos no coinciden');
+    $('album-error').hidden = true; $('album-crear').disabled = true; $('album-crear').textContent = 'Creando…'; // derivar la llave tarda ~1 s a propósito
+    try {
+        const { id, recup, doc: d, mk } = await crearAlbumCripto(nombre, s1, metodo);
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'albumes', id), { uid: estado.user.uid, creado: serverTimestamp(), ...d });
+        batch.set(doc(db, 'limites', estado.user.uid), { ultima: serverTimestamp() });
+        await batch.commit();
+        recordarAlbum({ id, nombre, metodo });
+        $('album-modal').classList.remove('active'); $('form-album').reset();
+        mostrarCodigos(id, recup, () => entrarAlbum({ id, nombre, metodo }, mk, { ...d, uid: estado.user.uid }));
+    } catch (e2) { console.error(e2); err('No se pudo crear el álbum' + cod(e2)); }
+    finally { $('album-crear').disabled = false; $('album-crear').textContent = 'Crear álbum'; }
+});
+// El código y la clave de recuperación se muestran UNA vez; al continuar se borran de la pantalla.
+function mostrarCodigos(id, recup, alContinuar) {
+    $('guardar-id').textContent = agrupar(id); $('guardar-recup').textContent = agrupar(recup);
+    $('guardar-ok').checked = false; $('guardar-continuar').disabled = true;
+    $('guardar-modal').classList.add('active');
+    $('guardar-continuar').onclick = () => { $('guardar-modal').classList.remove('active'); $('guardar-id').textContent = ''; $('guardar-recup').textContent = ''; alContinuar(); };
+}
+$('guardar-ok').addEventListener('change', (e) => { $('guardar-continuar').disabled = !e.target.checked; });
+document.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', async () => {
+    const texto = $(b.dataset.copiar).textContent;
+    try { await navigator.clipboard.writeText(texto); mostrarToast('Copiado', 'success'); } catch { window.prompt('Copia este texto:', texto); }
+}));
+
+// ---------- Abrir con un código (otro dispositivo, o si borraste los datos del navegador) ----------
+$('btn-abrir-codigo').addEventListener('click', () => { $('codigo-input').value = ''; $('codigo-error').hidden = true; $('codigo-modal').classList.add('active'); $('codigo-input').focus(); });
+$('codigo-cancelar').addEventListener('click', () => $('codigo-modal').classList.remove('active'));
+$('form-codigo').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = (m) => { $('codigo-error').textContent = m; $('codigo-error').hidden = false; };
+    const id = normalizarCodigo($('codigo-input').value);
+    if (!CODIGO_VALIDO.test(id)) return err('Ese código no parece válido (son 26 letras y números)');
+    try {
+        const snap = await getDoc(doc(db, 'albumes', id));
+        if (!snap.exists()) return err('No existe ningún álbum con ese código');
+        const album = leerAlbumes().find((a) => a.id === id) || { id, nombre: null, metodo: snap.data().metodo };
+        recordarAlbum(album); pintarAlbumes();
+        $('codigo-modal').classList.remove('active'); pedirDesbloqueo(album);
+    } catch (e2) { console.error(e2); err('No se pudo comprobar el código' + cod(e2)); }
+});
+
+// ---------- Desbloquear ----------
+let albumPorAbrir = null, usandoRecup = false;
+const intentos = new Map(); // intentos fallidos por álbum (en memoria): pausa creciente. Es un freno para quien mira por encima del hombro; la defensa real es el cálculo lento (PBKDF2)
+function configurarDesbloqueo() {
+    const a = albumPorAbrir, pin = a.metodo === 'pin' && !usandoRecup, inp = $('desbloqueo-input');
+    $('desbloqueo-titulo').textContent = `Desbloquear «${a.nombre || 'álbum privado'}»`;
+    inp.value = ''; inp.inputMode = pin ? 'numeric' : 'text';
+    inp.placeholder = usandoRecup ? 'Clave de recuperación' : pin ? 'PIN' : 'Frase secreta';
+    $('desbloqueo-recup').textContent = usandoRecup ? (a.metodo === 'pin' ? 'Usar mi PIN' : 'Usar mi frase') : 'Usé una clave de recuperación';
+    $('desbloqueo-error').hidden = true;
+}
+function pedirDesbloqueo(album) {
+    albumPorAbrir = album; usandoRecup = false; configurarDesbloqueo();
+    $('desbloqueo-modal').classList.add('active'); $('desbloqueo-input').focus();
+}
+const errorDesbloqueo = (m) => { $('desbloqueo-error').textContent = m; $('desbloqueo-error').hidden = false; };
+$('desbloqueo-recup').addEventListener('click', () => { usandoRecup = !usandoRecup; configurarDesbloqueo(); $('desbloqueo-input').focus(); });
+$('desbloqueo-cancelar').addEventListener('click', () => $('desbloqueo-modal').classList.remove('active'));
+$('form-desbloqueo').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const a = albumPorAbrir, secreto = $('desbloqueo-input').value;
+    const espera = (intentos.get(a.id)?.hasta || 0) - Date.now();
+    if (espera > 0) return errorDesbloqueo(`Espera ${Math.ceil(espera / 1000)} s antes de volver a intentar`);
+    if (!secreto) return;
+    $('desbloqueo-ok').disabled = true; $('desbloqueo-ok').textContent = 'Desbloqueando…';
+    try {
+        const snap = await getDoc(doc(db, 'albumes', a.id));
+        if (!snap.exists()) { $('desbloqueo-modal').classList.remove('active'); return mostrarToast('Este álbum ya no existe', 'error'); }
+        const d = snap.data();
+        const mk = await abrirAlbumCripto(a.id, d, secreto, usandoRecup);
+        intentos.delete(a.id); $('desbloqueo-modal').classList.remove('active');
+        await entrarAlbum(a, mk, d);
+    } catch (err) {
+        if (err.message === 'SECRETO_INCORRECTO') {
+            const n = (intentos.get(a.id)?.n || 0) + 1;
+            intentos.set(a.id, { n, hasta: Date.now() + (n >= 3 ? Math.min(30, 2 ** (n - 2)) * 1000 : 0) }); // desde el 3.er fallo: 2 s, 4 s, 8 s... hasta 30 s
+            errorDesbloqueo(usandoRecup ? 'Clave de recuperación incorrecta' : 'Frase o PIN incorrectos');
+        } else { console.error(err); errorDesbloqueo('No se pudo abrir el álbum' + cod(err)); }
+    } finally { $('desbloqueo-ok').disabled = false; $('desbloqueo-ok').textContent = 'Desbloquear'; }
+});
+
+// ---------- Dentro del álbum ----------
+async function entrarAlbum(album, mk, d) {
+    let nombre = album.nombre;
+    try { nombre = (await descifrarJSON(mk, d.nombre, `${album.id}:nombre`)).nombre; } catch { /* sin nombre: se usa el recordado */ }
+    recordarAlbum({ id: album.id, nombre, metodo: d.metodo });
+    const p = estado.privado = { id: album.id, nombre, mk, propio: d.uid === estado.user?.uid, items: [], idsTodos: [], urls: new Map(), ultimoUso: Date.now(), unsub: null };
+    $('priv-nombre').textContent = nombre;
+    $('priv-lista-wrap').hidden = true; $('priv-album').hidden = false;
+    for (const id of ['priv-subir', 'priv-eliminar']) $(id).hidden = !p.propio;  // solo el dispositivo que lo creó puede subir o borrar (lo exigen las reglas)
+    $('priv-lectura').hidden = p.propio;
+    p.unsub = onSnapshot(query(collection(db, 'albumes', album.id, 'items'), orderBy('fecha', 'desc')), async (snap) => {
+        const docs = snap.docs.map((x) => ({ id: x.id, ...x.data() }));
+        const items = (await Promise.all(docs.map(async (it) => {
+            try { return { ...it, meta: await descifrarJSON(mk, it.meta, `${album.id}:meta`) }; } catch { return null; } // un elemento alterado o dañado simplemente no se muestra
+        }))).filter(Boolean);
+        if (estado.privado !== p) return; // se bloqueó mientras descifrábamos
+        p.items = items; p.idsTodos = docs.map((x) => x.id);
+        pintarGridPrivado();
+    }, (err) => { console.error(err); mostrarToast('No se pudo cargar el álbum' + cod(err), 'error'); });
+}
+function bloquearAlbum(aviso) {
+    const p = estado.privado; if (!p) return;
+    p.unsub?.();
+    p.urls.forEach((pr) => pr.then((u) => URL.revokeObjectURL(u)).catch(() => {})); // libera los archivos descifrados de la memoria
+    estado.privado = null;
+    estado.cola.filter((j) => j.destino && !['ok', 'cancelado'].includes(j.estado)).forEach(cancelarJob); // nada privado sigue subiendo con el álbum cerrado
+    if (estado.destino) { estado.destino = null; $('modal-subida').classList.remove('active'); }
+    cerrarVisor(); $('priv-grid').replaceChildren(); $('priv-album').hidden = true; $('priv-lista-wrap').hidden = false;
+    pintarAlbumes();
+    if (aviso) mostrarToast(aviso, 'info');
+}
+$('priv-bloquear').addEventListener('click', () => bloquearAlbum());
+$('priv-subir').addEventListener('click', () => { const d = destinoActual(); if (d) abrirSubida(d); });
+$('priv-codigo').addEventListener('click', async () => {
+    const t = agrupar(estado.privado.id);
+    try { await navigator.clipboard.writeText(t); mostrarToast('Código del álbum copiado', 'success'); } catch { window.prompt('Código del álbum:', t); }
+});
+// Bloqueo automático: por inactividad, por estar en segundo plano y al cerrar la pestaña.
+['click', 'keydown', 'pointerdown', 'touchstart'].forEach((t) => document.addEventListener(t, () => { if (estado.privado) estado.privado.ultimoUso = Date.now(); }, { passive: true }));
+setInterval(() => { if (estado.privado && Date.now() - estado.privado.ultimoUso > AUTOBLOQUEO_MS) bloquearAlbum('Álbum bloqueado por inactividad'); }, 10000);
+let timerOculto = null;
+document.addEventListener('visibilitychange', () => { clearTimeout(timerOculto); if (document.visibilityState === 'hidden' && estado.privado) timerOculto = setTimeout(() => bloquearAlbum('Álbum bloqueado'), OCULTO_MS); });
+addEventListener('pagehide', () => bloquearAlbum());
+
+// ---------- Archivos cifrados: bajar, descifrar y mostrar ----------
+async function bajarDescifrado(item, campo) { // campo: 'archivo' | 'mini'
+    const p = estado.privado; if (!p) throw new Error('Álbum bloqueado');
+    const mini = campo === 'mini';
+    const r = await fetch(`${WORKER_BASE}/file/${encodeURIComponent(mini ? item.m : item.f)}`);
+    if (!r.ok) throw new Error('No se pudo descargar el archivo');
+    const claro = await descifrarBytes(p.mk, deB64(mini ? item.ivm : item.iv), await r.arrayBuffer(), `${p.id}:${campo}`); // lanza si el archivo fue alterado
+    return new Blob([claro], { type: mini ? 'image/jpeg' : (item.meta.mime || 'application/octet-stream') });
+}
+function urlDe(item, campo) { // guarda en caché la promesa: un archivo se baja y descifra una sola vez
+    const p = estado.privado, k = `${item.id}:${campo}`;
+    if (!p.urls.has(k)) p.urls.set(k, bajarDescifrado(item, campo).then((b) => { if (estado.privado !== p) throw new Error('Álbum bloqueado'); return URL.createObjectURL(b); }));
+    return p.urls.get(k);
+}
+// Las miniaturas se bajan solo cuando la tarjeta está a punto de verse.
+const obsMini = new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) { obsMini.unobserve(en.target); en.target.__cargar?.(); } }), { rootMargin: '200px' });
+function crearTarjetaPrivada(item, i) {
+    const ph = el('div', { class: 'priv-ph' }, icono(item.meta.tipo === 'video' ? 'fas fa-film' : 'far fa-image'));
+    const media = el('div', { class: 'card-media', role: 'button', tabindex: '0', 'aria-label': `Abrir «${item.meta.titulo}»`, onclick: () => abrirVisor(i),
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirVisor(i); } } },
+        el('div', { class: 'card-badges' }, el('span', { class: 'card-badge', text: item.meta.tipo === 'video' ? 'Video' : 'Imagen' })), ph);
+    media.__cargar = async () => {
+        if (!item.m) return;
+        try { ph.replaceWith(el('img', { src: await urlDe(item, 'mini'), alt: '' })); } catch { /* se queda el ícono */ }
+    };
+    obsMini.observe(media);
+    const acciones = el('div', { class: 'card-actions' }, btnAccion('download', 'Descargar', 'fas fa-download', () => descargarPrivado(item)));
+    if (estado.privado.propio) acciones.append(btnAccion('delete', 'Eliminar', 'fas fa-trash', () => eliminarItemPrivado(item)));
+    return el('article', { class: 'card', 'data-id': item.id, 'aria-label': item.meta.titulo }, media, acciones,
+        el('div', { class: 'card-title' }, el('span', { class: 'card-title-text', text: item.meta.titulo }),
+            item.meta.tomada ? el('time', { class: 'card-fecha', datetime: new Date(item.meta.tomada).toISOString(), text: fmtFecha(item.meta.tomada) }) : null));
+}
+function pintarGridPrivado() {
+    const p = estado.privado; if (!p) return;
+    $('priv-grid').replaceChildren(...p.items.map(crearTarjetaPrivada));
+    $('priv-vacio').hidden = p.items.length > 0;
+}
+async function descargarPrivado(item) {
+    try {
+        const a = el('a', { href: await urlDe(item, 'archivo'), download: item.meta.nombre || item.meta.titulo });
+        document.body.append(a); a.click(); a.remove();
+    } catch (e) { console.error(e); mostrarToast('No se pudo descifrar el archivo', 'error'); }
+}
+async function eliminarItemPrivado(item) {
+    if (!(await confirmar('Eliminar archivo', `«${item.meta.titulo}» se borrará del álbum.`))) return;
+    try { await deleteDoc(doc(db, 'albumes', estado.privado.id, 'items', item.id)); mostrarToast('Archivo eliminado', 'success'); }
+    catch (e) { console.error(e); mostrarToast('No tienes permiso para eliminar esto' + cod(e), 'error'); }
+}
+$('priv-eliminar').addEventListener('click', async () => {
+    const p = estado.privado;
+    if (!(await confirmar('Eliminar álbum', `Se borrarán «${p.nombre}» y todo lo que contiene. No se puede deshacer.`))) return;
+    try {
+        for (let i = 0; i < p.idsTodos.length; i += 400) { // un batch admite hasta 500 operaciones
+            const b = writeBatch(db); p.idsTodos.slice(i, i + 400).forEach((x) => b.delete(doc(db, 'albumes', p.id, 'items', x))); await b.commit();
+        }
+        await deleteDoc(doc(db, 'albumes', p.id)); // primero los archivos: las reglas del álbum dependen de que este documento exista
+        guardarAlbumes(leerAlbumes().filter((a) => a.id !== p.id));
+        bloquearAlbum(); mostrarToast('Álbum eliminado', 'success');
+    } catch (e) { console.error(e); mostrarToast('No se pudo eliminar el álbum' + cod(e), 'error'); }
+});
+
+// ---------- Visor ----------
+let visorIdx = 0;
+async function abrirVisor(i) {
+    const p = estado.privado, item = p?.items[i]; if (!item) return;
+    visorIdx = i;
+    $('visor-priv').classList.add('active');
+    $('visor-titulo').textContent = item.meta.titulo;
+    $('visor-contador').textContent = `${i + 1} / ${p.items.length}${item.meta.tomada ? ` · ${fmtFecha(item.meta.tomada)}` : ''}`;
+    $('visor-medio').replaceChildren(el('p', { class: 'visor-cargando', text: 'Descifrando…' }));
+    try {
+        const url = await urlDe(item, 'archivo');
+        if (visorIdx !== i || !estado.privado) return; // cambiaste de archivo mientras se descifraba
+        $('visor-medio').replaceChildren(item.meta.tipo === 'video' ? el('video', { src: url, controls: '', autoplay: '', playsinline: '' }) : el('img', { src: url, alt: item.meta.titulo }));
+    } catch (e) { console.error(e); if (visorIdx === i) $('visor-medio').replaceChildren(el('p', { class: 'visor-cargando', text: 'No se pudo descifrar este archivo' })); }
+}
+function cerrarVisor() { $('visor-priv').classList.remove('active'); $('visor-medio').replaceChildren(); }
+const moverVisor = (d) => { const n = estado.privado?.items.length; if (n) abrirVisor((visorIdx + d + n) % n); };
+$('visor-cerrar').addEventListener('click', cerrarVisor);
+$('visor-prev').addEventListener('click', () => moverVisor(-1));
+$('visor-next').addEventListener('click', () => moverVisor(1));
+document.addEventListener('keydown', (e) => { if ($('visor-priv').classList.contains('active')) { if (e.key === 'ArrowRight') moverVisor(1); if (e.key === 'ArrowLeft') moverVisor(-1); } });
+function cerrarPrivTop() { // Escape cierra el modal de álbumes que esté arriba
+    for (const id of ['visor-priv', 'desbloqueo-modal', 'codigo-modal', 'album-modal']) {
+        if ($(id).classList.contains('active')) { if (id === 'visor-priv') cerrarVisor(); else $(id).classList.remove('active'); return true; }
+    }
+    return false;
+}
+
+// ---------- Subir al álbum: cifrar ANTES de que nada salga del navegador ----------
+async function subirCifrado(ct, onProgress, ctl = {}) {
+    if (!auth.currentUser) throw new Error('Aún no hay sesión. Recarga la página.');
+    const idToken = await auth.currentUser.getIdToken();
+    const fd = new FormData();
+    fd.append('file', new Blob([ct], { type: 'application/octet-stream' }), 'cifrado.bin');
+    fd.append('cifrado', '1'); // el Worker solo acepta bytes sin tipo si se declara que son cifrados
+    const texto = await enviarConProgreso(`${WORKER_BASE}/upload`, fd, onProgress, { Authorization: `Bearer ${idToken}` }, ctl);
+    let data; try { data = JSON.parse(texto); } catch { throw new Error('Respuesta inválida del servidor de subida'); }
+    if (!data.fileId) throw new Error(data.error || 'No se obtuvo el file_id');
+    return data.fileId;
+}
+async function subirPrivado(job, abortado) {
+    const { id, mk } = job.destino;
+    const archivo = job.file.type.startsWith('image/') ? await comprimirImagen(job.file) : job.file;
+    if (abortado()) return;
+    if (archivo.size > LIMITE_PRIVADO) throw new Error('El archivo pesa más de 19MB');
+    const bytes = new Uint8Array(await archivo.arrayBuffer());
+    const miniBlob = await miniaturaBlob(archivo, true).catch(() => null);
+    const tomada = await fechaDeToma(job.file);
+    const c = await cifrarBytes(mk, bytes, `${id}:archivo`); // desde aquí, lo que sale ya es ilegible
+    const f = await subirCifrado(c.ct, (p) => { job.progreso = p; pintarFila(job); }, job.ctl);
+    if (abortado()) return;
+    let m = null, ivm = null;
+    if (miniBlob) { const cm = await cifrarBytes(mk, new Uint8Array(await miniBlob.arrayBuffer()), `${id}:mini`); m = await subirCifrado(cm.ct, () => {}, job.ctl); ivm = aB64(cm.iv); }
+    if (abortado()) return;
+    // El título, el tipo y la fecha también viajan cifrados: Firebase solo ve texto sin sentido.
+    const meta = await cifrarJSON(mk, { titulo: job.file.name.replace(/\.[^.]+$/, '').slice(0, 80), nombre: job.file.name, tipo: archivo.type.startsWith('image/') ? 'imagen' : 'video', mime: archivo.type, tomada }, `${id}:meta`);
+    await esperar(Math.max(0, ultimaPublicacion + 3500 - Date.now())); // respeta el cooldown de las reglas
+    if (abortado()) return;
+    const batch = writeBatch(db);
+    batch.set(doc(collection(db, 'albumes', id, 'items')), { f, iv: aB64(c.iv), ...(m ? { m, ivm } : {}), meta, tam: bytes.length, fecha: serverTimestamp() });
+    batch.set(doc(db, 'limites', estado.user.uid), { ultima: serverTimestamp() });
+    await batch.commit();
+}
+
+console.log('%cPollita Feliz', 'color:#e91e63;font-size:14px;font-weight:bold;');

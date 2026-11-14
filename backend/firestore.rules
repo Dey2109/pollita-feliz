@@ -1,85 +1,129 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
 
-    // Admin = SOLO tu UID (el identificador único de tu usuario en Firebase Auth).
-    // Authentication -> Users -> columna "User UID". No depende de verificar el correo.
-    function esAdmin() {
-      return request.auth != null && request.auth.uid == 'n8Q5MBQkxdMbQx1FJUOLPTfUTsF2';
-    }
+      // Admin = SOLO tu UID (el identificador único de tu usuario en Firebase Auth).
+      // Authentication -> Users -> columna "User UID". No depende de verificar el correo.
+      function esAdmin() {
+        return request.auth != null && request.auth.uid == 'n8Q5MBQkxdMbQx1FJUOLPTfUTsF2';
+      }
 
-    // Ruta al documento "limites/<uid>": guarda cuándo subió algo esa persona por última vez.
-    function limite() {
-      return /databases/$(database)/documents/limites/$(request.auth.uid);
-    }
+      // Ruta al documento "limites/<uid>": guarda cuándo subió algo esa persona por última vez.
+      function limite() {
+        return /databases/$(database)/documents/limites/$(request.auth.uid);
+      }
 
-    match /galeria/{id} {
-      allow read: if true;
+      match /galeria/{id} {
+        allow read: if true;
 
-      function esDueno() { return request.auth != null && resource.data.uid == request.auth.uid; }
-      // ¿Los únicos campos que cambian en esta escritura son estos?
-      function cambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+        function esDueno() { return request.auth != null && resource.data.uid == request.auth.uid; }
+        // ¿Los únicos campos que cambian en esta escritura son estos?
+        function cambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
 
-      // CREAR: sesión válida + datos con forma exacta + 3 segundos entre publicaciones.
-      allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['titulo', 'url', 'tipo', 'uid', 'fecha', 'likedBy', 'thumb', 'hash', 'tomada'])
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.titulo is string
-        && request.resource.data.titulo.size() > 0
-        && request.resource.data.titulo.size() <= 60
-        && request.resource.data.url is string
-        && request.resource.data.url.matches('https://.*')
-        && request.resource.data.url.size() < 500
-        // La miniatura es opcional; si viene, debe ser un https corto.
-        && (!('thumb' in request.resource.data)
-            || (request.resource.data.thumb is string
-                && request.resource.data.thumb.matches('https://.*')
-                && request.resource.data.thumb.size() < 500))
-        // Huella (para avisar de duplicados) y fecha de toma de la foto: opcionales, con tipo y tamaño controlados.
-        && (!('hash' in request.resource.data) || (request.resource.data.hash is string && request.resource.data.hash.size() <= 80))
-        && (!('tomada' in request.resource.data) || request.resource.data.tomada is number)
-        && request.resource.data.tipo in ['imagen', 'video', 'enlace']
-        && request.resource.data.fecha == request.time            // la fecha la pone el servidor, no el cliente
-        && request.resource.data.likedBy.size() == 0              // nadie nace con likes inflados
-        // Anti-spam: la marca "última subida" se actualiza en la MISMA operación (writeBatch)...
-        && getAfter(limite()).data.ultima == request.time
-        // ...y la anterior debe tener más de 3 segundos (o no existir si es la primera vez).
-        && (!exists(limite()) || request.time > get(limite()).data.ultima + duration.value(3, 's'));
+        // CREAR: sesión válida + datos con forma exacta + 3 segundos entre publicaciones.
+        allow create: if request.auth != null
+          && request.resource.data.keys().hasOnly(['titulo', 'url', 'tipo', 'uid', 'fecha', 'likedBy', 'thumb', 'hash', 'tomada'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.titulo is string
+          && request.resource.data.titulo.size() > 0
+          && request.resource.data.titulo.size() <= 60
+          && request.resource.data.url is string
+          && request.resource.data.url.matches('https://.*')
+          && request.resource.data.url.size() < 500
+          // La miniatura es opcional; si viene, debe ser un https corto.
+          && (!('thumb' in request.resource.data)
+              || (request.resource.data.thumb is string
+                  && request.resource.data.thumb.matches('https://.*')
+                  && request.resource.data.thumb.size() < 500))
+          // Huella (para avisar de duplicados) y fecha de toma de la foto: opcionales, con tipo y tamaño controlados.
+          && (!('hash' in request.resource.data) || (request.resource.data.hash is string && request.resource.data.hash.size() <= 80))
+          && (!('tomada' in request.resource.data) || request.resource.data.tomada is number)
+          && request.resource.data.tipo in ['imagen', 'video', 'enlace']
+          && request.resource.data.fecha == request.time            // la fecha la pone el servidor, no el cliente
+          && request.resource.data.likedBy.size() == 0              // nadie nace con likes inflados
+          // Anti-spam: la marca "última subida" se actualiza en la MISMA operación (writeBatch)...
+          && getAfter(limite()).data.ultima == request.time
+          // ...y la anterior debe tener más de 3 segundos (o no existir si es la primera vez).
+          && (!exists(limite()) || request.time > get(limite()).data.ultima + duration.value(3, 's'));
 
-      // ACTUALIZAR: cuatro casos, y en cada uno solo se puede tocar UN campo.
-      allow update: if request.auth != null && (
-        // 1) Like: solo "likedBy", y solo agregar o quitar TU propio uid.
-        //    .get('likedBy', []) tolera publicaciones viejas que no tienen ese campo.
-        (cambia(['likedBy']) && (
-             request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().union([request.auth.uid].toSet())
-          || request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().difference([request.auth.uid].toSet())))
-        // 2) Editar título: dueño o admin.
-        || ((esDueno() || esAdmin()) && cambia(['titulo'])
-            && request.resource.data.titulo is string
-            && request.resource.data.titulo.size() > 0
-            && request.resource.data.titulo.size() <= 60)
-        // 3) Mandar a la papelera: dueño o admin.
-        || ((esDueno() || esAdmin()) && cambia(['borrado']) && request.resource.data.borrado == true)
-        // 4) Restaurar de la papelera: solo admin.
-        || (esAdmin() && cambia(['borrado']) && request.resource.data.borrado == false)
-        // 5) Reacción con emoji: solo cambia TU entrada dentro del mapa "reac" (uid -> nombre de la reacción).
-        || (cambia(['reac'])
-            && request.resource.data.reac.diff(resource.data.get('reac', {})).affectedKeys().hasOnly([request.auth.uid])
-            && (!(request.auth.uid in request.resource.data.reac)
-                || request.resource.data.reac[request.auth.uid] in ['corazon', 'risa', 'sorpresa', 'triste', 'aplauso']))
-      );
+        // ACTUALIZAR: cuatro casos, y en cada uno solo se puede tocar UN campo.
+        allow update: if request.auth != null && (
+          // 1) Like: solo "likedBy", y solo agregar o quitar TU propio uid.
+          //    .get('likedBy', []) tolera publicaciones viejas que no tienen ese campo.
+          (cambia(['likedBy']) && (
+              request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().union([request.auth.uid].toSet())
+            || request.resource.data.likedBy.toSet() == resource.data.get('likedBy', []).toSet().difference([request.auth.uid].toSet())))
+          // 2) Editar título: dueño o admin.
+          || ((esDueno() || esAdmin()) && cambia(['titulo'])
+              && request.resource.data.titulo is string
+              && request.resource.data.titulo.size() > 0
+              && request.resource.data.titulo.size() <= 60)
+          // 3) Mandar a la papelera: dueño o admin.
+          || ((esDueno() || esAdmin()) && cambia(['borrado']) && request.resource.data.borrado == true)
+          // 4) Restaurar de la papelera: solo admin.
+          || (esAdmin() && cambia(['borrado']) && request.resource.data.borrado == false)
+          // 5) Reacción con emoji: solo cambia TU entrada dentro del mapa "reac" (uid -> nombre de la reacción).
+          || (cambia(['reac'])
+              && request.resource.data.reac.diff(resource.data.get('reac', {})).affectedKeys().hasOnly([request.auth.uid])
+              && (!(request.auth.uid in request.resource.data.reac)
+                  || request.resource.data.reac[request.auth.uid] in ['corazon', 'risa', 'sorpresa', 'triste', 'aplauso']))
+        );
 
-      // BORRADO REAL: solo el admin (el resto "borra" mandando a la papelera).
-      allow delete: if esAdmin();
-    }
+        // BORRADO REAL: solo el admin (el resto "borra" mandando a la papelera).
+        allow delete: if esAdmin();
+      }
 
-    // Marca de última subida por usuario: cada quien escribe solo la suya, con hora del servidor.
-    match /limites/{uid} {
-      allow read: if false;
-      allow create, update: if request.auth != null
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['ultima'])
-        && request.resource.data.ultima == request.time;
+      // ---------- Álbumes privados (contenido CIFRADO en el navegador) ----------
+      // Aquí no hay nada legible: el nombre, los títulos y los archivos llegan cifrados. El "permiso" para ABRIR un álbum
+      // es conocer su código (128 bits aleatorios: imposible de adivinar) y, para ver el contenido, tener además la frase o el PIN.
+      function cajaOk(c) { return c is map && c.keys().hasOnly(['iv', 'ct']) && c.iv is string && c.iv.size() <= 32 && c.ct is string && c.ct.size() <= 4000; }
+      function limiteOk() {
+        return getAfter(limite()).data.ultima == request.time
+            && (!exists(limite()) || request.time > get(limite()).data.ultima + duration.value(3, 's'));
+      }
+      match /albumes/{albumId} {
+        allow get: if true;       // abrir UN álbum: hay que saber su código
+        allow list: if false;     // nadie puede listar los álbumes que existen
+
+        allow create: if request.auth != null
+          && albumId.matches('[0-9A-HJKMNP-TV-Z]{26}')
+          && request.resource.data.keys().hasOnly(['uid', 'creado', 'metodo', 'kdf', 'env', 'rec', 'nombre'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.creado == request.time
+          && request.resource.data.metodo in ['frase', 'pin']
+          && request.resource.data.kdf.keys().hasOnly(['iter', 'salt']) && request.resource.data.kdf.iter is int && request.resource.data.kdf.salt.size() <= 32
+          && cajaOk(request.resource.data.env) && cajaOk(request.resource.data.nombre)
+          && request.resource.data.rec.keys().hasOnly(['iter', 'salt', 'iv', 'ct']) && request.resource.data.rec.iter is int
+          && request.resource.data.rec.salt.size() <= 32 && request.resource.data.rec.iv.size() <= 32 && request.resource.data.rec.ct.size() <= 4000
+          && limiteOk();
+        allow update: if false;
+        allow delete: if request.auth != null && (resource.data.uid == request.auth.uid || esAdmin());
+
+        match /items/{itemId} {
+          // Solo quien creó el álbum (esta cuenta anónima) puede añadir o borrar contenido.
+          function dueno() { return get(/databases/$(database)/documents/albumes/$(albumId)).data.uid == request.auth.uid; }
+          allow get, list: if true;
+          allow create: if request.auth != null && dueno()
+            && request.resource.data.keys().hasOnly(['f', 'iv', 'm', 'ivm', 'meta', 'tam', 'fecha'])
+            && request.resource.data.f is string && request.resource.data.f.size() < 200
+            && request.resource.data.iv is string && request.resource.data.iv.size() <= 32
+            && (!('m' in request.resource.data) || (request.resource.data.m is string && request.resource.data.m.size() < 200 && request.resource.data.ivm is string && request.resource.data.ivm.size() <= 32))
+            && cajaOk(request.resource.data.meta)
+            && request.resource.data.tam is int
+            && request.resource.data.fecha == request.time
+            && limiteOk();
+          allow update: if false;
+          allow delete: if request.auth != null && (dueno() || esAdmin());
+        }
+      }
+
+      // Marca de última subida por usuario: cada quien escribe solo la suya, con hora del servidor.
+      match /limites/{uid} {
+        allow read: if false;
+        allow create, update: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['ultima'])
+          && request.resource.data.ultima == request.time;
+      }
     }
   }
-}
